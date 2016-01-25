@@ -15,6 +15,7 @@
                  [datomic-schema "1.3.0"]
 
                  ;; Others
+                 [bouncer "1.0.0"]
                  [com.rpl/specter "0.9.1"]
 
                  ;; Tests
