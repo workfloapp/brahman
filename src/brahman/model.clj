@@ -13,24 +13,25 @@
 ;;;; Model protocol
 
 (defprotocol IModel
-  (model-name   [this] "The name of the model as a symbol")
-  (schema       [this] "The raw schema as specified originally")
-  (store-schema [this] "The schema parsed for the store being used")
-  (validation   [this] "Validation data parsed from the raw schema")
-  (sources      [this] "Data sources used in this model")
-  (query-attrs  [this] "Attributes for use in queries, computed from
-                        the raw schema (with joins etc.)")
-  (query        [this q]
-                [this q extra]
-                       "Queries the model based on its data sources,
-                        given the query q and extra information (e.g.
-                        query clauses)."))
+  (model-name [this] "The name of the model as a symbol")
+  (schema     [this] "The raw schema as specified originally")
+  (validation [this] "Validation rules defined for the model")
+  (sources    [this] "Data sources used in this model")
+  (stores     [this] "The stores used in the sources of this model")
+  (attrs      [this] "Attributes for use in queries, computed from
+                      the raw schema (with joins etc.)")
+  (query      [this q]
+              [this q extra]
+                     "Queries the model based on its data sources,
+                      given the query q and extra information (e.g.
+                      query clauses).")
+  (validate   [this data]))
 
 ;;; Source queries
 
 (defn- query-main
-  [{:keys [store query-attrs query model]} source q extra]
-  (let [attrs (or q (query-attrs model))]
+  [{:keys [store schema->attrs query model]} source q extra]
+  (let [attrs (or q (schema->attrs model))]
     (query {:store store :model model}
            (:query source)
            {:inputs [attrs] :extra extra})))
@@ -84,22 +85,22 @@
 (defrecord Model [props config]
   IModel
   (model-name [this]
-    (:name (schema this)))
+    (:name props))
 
   (schema [this]
     (:schema props))
 
-  (store-schema [this]
-    ((:store-schema config) (schema this)))
-
   (validation [this]
-    ((:validation config) (schema this)))
+    (:validation props))
 
   (sources [this]
     (:sources props))
 
-  (query-attrs [this]
-    ((:query-attrs config) this))
+  (stores [this]
+    (set (remove nil? (map :store (sources this)))))
+
+  (attrs [this]
+    ((:schema->attrs config) this))
 
   (query [this q]
     (query this q nil))
@@ -110,11 +111,15 @@
           grouped (group-by :type sorted)]
       (reduce #(query-sources this q extra %1 %2)
               nil
-              grouped))))
+              grouped)))
+
+  (validate [this data]
+    (let [config (:config this)]
+      ((:validate config) this (validation this) data))))
 
 (defn model
   [{:keys [schema] :as props} config]
-  {:pre [(and (map? schema) (contains? schema :name))]}
+  {:pre [(map? schema)]}
   (Model. props config))
 
 ;;;; Modeler protocol
@@ -124,12 +129,33 @@
 
 ;;;; Modeler implementation
 
-(defn- install-schemas! [modeler]
+(defn- models-for-store [models store]
+  (into #{}
+        (filter (fn [model]
+                  (some #{store} (stores model))))
+        models))
+
+(defn- collect-schemas
+  "Returns a map of the following structure:
+
+   {<store1 name> {<model1 name> <schema>
+                   <model2 name> <schema>}
+    ...}"
+  [models]
+  (letfn [(collect-step [res store]
+            (let [models  (models-for-store models store)
+                  schemas (map schema models)
+                  m       (zipmap models schemas)]
+              (update res store #(into {} (merge % m)))))]
+    (let [stores (set (apply concat (map stores models)))]
+      (reduce collect-step {} stores))))
+
+(defn- install-schemas!
+  "Collects the schemas from all models"
+  [modeler]
   (let [config  (:config modeler)
-        store   (:store config)
-        models  (:models config)
-        schemas (mapv store-schema models)]
-    ((:install-schemas config) store schemas)))
+        models  (:models config)]
+    ((:install-schemas config) (collect-schemas models))))
 
 (defrecord Modeler [config]
   IModeler
@@ -143,54 +169,43 @@
 (defn- default-validation [model]
   nil)
 
-(defn- default-query-attrs [model]
+(defn- default-schema->attrs [model]
   [])
 
-(defn- default-query
+(defn- default-validate [model data]
+  true)
+
+(defn- default-query-source
   [store model query {:keys [inputs extra]}]
   store)
 
 (defn- default-transform [tspec raw-value]
   (tspec raw-value))
 
-(defn- default-merge-main [mains main]
-  (into [] (concat mains main)))
-
-(defn- default-merge-attr [schema entity name value]
-  (assoc entity name value))
-
 (defn modeler
   [{:keys [models
-           store store-schema install-schemas
+           install-schemas
+           schema->attrs
+           validate
            entity-id
-           validation
-           query-attrs query
-           transform
-           merge-main merge-attr]
+           query-source
+           transform]
     :or {models          []
-         store           nil
-         store-schema    default-store-schema
          install-schemas (constantly nil)
+         schema->attrs   default-schema->attrs
+         validate        default-validate
          entity-id       identity
-         validation      default-validation
-         query-attrs     default-query-attrs
-         query           default-query
-         transform       default-transform
-         merge-main      default-merge-main
-         merge-attr      default-merge-attr}
+         query-source    default-query-source
+         transform       default-transform}
     :as config}]
   {:pre [(map? config)]}
   (let [config'  {:models          models
-                  :store           store
-                  :store-schema    store-schema
                   :install-schemas install-schemas
                   :entity-id       entity-id
-                  :validation      validation
-                  :query-attrs     query-attrs
-                  :query           query
-                  :transform       transform
-                  :merge-main      merge-main
-                  :merge-attr      merge-attr}
+                  :validate        validate
+                  :schema->attrs   schema->attrs
+                  :query-source    query-source
+                  :transform       transform}
         models'  (for [model-spec models]
                    (model model-spec config'))
         modeler' (Modeler. (assoc config' :models models'))]
