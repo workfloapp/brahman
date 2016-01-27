@@ -63,76 +63,10 @@ Which leads us to Brahman's features:
 
 ## How does it work?
 
-### 1. Define data models
+TODO
 
-```
-;; Define a user model (using datomic-schema in this case)
-(def user-model
-  {:name       :user
-   :version    1
-   :schema     {:username   [:string :indexed]
-                :email      [:string :indexed]
-                :name       [:string]
-                :friend     {[:ref :many] '...}}
-   :validation {:username   [v/required v/string]
-                :email      [v/required v/email]
-                :name       [v/string]
-                :friend     [v/every '...]}
-   :sources    [{:name      :db
-                 :source    :datomic
-                 :type      :datomic
-                 :query     '[:find (pull ?user ATTRS)
-                              :in $ ATTRS
-                              :where [?user :user/username _]]}
-                {:name      :popular?
-                 :type      :derived-attr
-                 :query     '[:find (count ?friend) .
-                              :in $ ?user
-                              :where [?user :user/friend ?friend]]
-                 :transform [[s/ALL] (fn [friends]
-                                       (and (not (nil? friends))
-                                            (pos? friends)))]}]})
+## License
 
-;; Define commands to operate on users
-(def commands
-  {'user/create
-   {:version        1
-    :authorizations []
-    :validations    [{:type         :model
-                      :param        :user
-                      :model        :user}]}
-   'user/update
-   {:version        1
-    :authorizations [{:type         :env
-                      :select-env   :auth-user
-                      :test         #'brahman.authnz/set?}
-                     {:type         :env
-                      :select-env   :auth-user
-                      :test         #'brahman.authnz/equals-param?
-                      :compare-param [:user :username]}
-                     ;; What about checks like:
-                     ;;
-                     ;; Is this an admin user?
-                     ;;   -> {:type          :env
-                     ;;       :select-env    [:auth-user :user/role?]
-                     ;;       :test          #'brahman.authnz/equals?
-                     ;;       :test-value    :roles/admin}
-                     ;;
-                     ;; Has the auth user created this user?
-                     ;;   -> {:type          :env
-                     ;;       :select-query  <DataScript query with the env map as its input>
-                     ;;       :test          #'brahman.authnz/equals?
-                     ;;       :test-value    ...}
-                     ;;
-                     ;; Is this user updating himself OR is he an admin?
-                     ;; Idea: Treat vectors of rules like `and` and sets of rules as `or`?
-                     ;;   -> #{<rule 1> <rule2>}
-                     ;;
-                     ;; Arbitrary function:
-                     ;;   -> {:type :pred
-                     ;;       :pred (fn [env cmd] ...)}
-                     ]
-    :validations    [{:type         :model
-                      :param        :user
-                      :model        :user}]}})
-```
+Brahman is (C) 2016 Jannis Pohlmann.
+
+It is licensed under GNU LGPL 2.1. For more details see LICENSE.txt.
