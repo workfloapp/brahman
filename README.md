@@ -2,8 +2,6 @@
 
 _A universe of backends for Om Next & other CQRS systems._
 
-
-
 ## What is Brahman and what can it do for me?
 
 * Models
@@ -13,7 +11,8 @@ _A universe of backends for Om Next & other CQRS systems._
   - Specify model version (in any format), schemas (in any format),
     validation rules (in any format) and data stores (of any kind)
     all in one place (colocation), in a declarative way, as data
-  - Extend data with attributes derived from the database on the fly
+  - Extend data with attributes derived from any of the databases
+    on the fly
 * Commands
   - Define commands in the system, including their versions, validation
     and authorization rules, in one place (colocation), declaratively,
@@ -27,6 +26,8 @@ _A universe of backends for Om Next & other CQRS systems._
       about client, authenticated user, database etc.)
     * Using database queries
     * Using arbitrary functions / predicates
+    * Producing validation and authorization errors that are readable
+      for humans and machines at the same time
   - Verify that all commands used in the system are validated
     and authorized
 
