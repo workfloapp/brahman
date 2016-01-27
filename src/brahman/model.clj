@@ -1,14 +1,12 @@
 (ns brahman.model
-  (:require [clojure.core.async :refer [go]]
-            [clojure.test :refer [function?]]
-            [com.rpl.specter :as specter]))
+  (:require [com.rpl.specter :as s]))
 
 ;;;; Transformations
 
 (defn transform-specter [tspec raw-data]
   (let [seq-data (if (coll? raw-data) raw-data [raw-data])
         tform    (into [] (conj tspec seq-data))
-        res      (apply specter/transform tform)]
+        res      (apply s/transform tform)]
     (cond-> res
       (not (coll? raw-data)) first)))
 
