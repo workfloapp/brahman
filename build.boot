@@ -1,8 +1,8 @@
 #!/usr/bin/env boot
 
 (set-env!
- :source-paths #{"src" "test"}
- :resource-paths #{"resources"}
+ :source-paths #{"test"}
+ :resource-paths #{"resources" "src"}
  :dependencies '[;; Boot
                  [adzerk/boot-test "1.0.6"]
 
@@ -27,7 +27,14 @@
 
 (require '[adzerk.boot-test :refer [test]])
 
-(deftask autotest
+(deftask test-auto
   []
   (comp (watch)
-     (test)))
+        (test)))
+
+(deftask install-local
+  []
+  (comp
+   (pom)
+   (jar)
+   (install)))
