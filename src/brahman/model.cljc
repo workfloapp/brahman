@@ -74,7 +74,9 @@
 
 (defmethod query-sources :default
   [_ _ _ _ [type _]]
-  (throw (Exception. (str "Unknown source type: " type))))
+  (let [msg (str "Unknown source type: " type)]
+    (throw #?(:cljs (js/Error. msg)
+              :clj  (Exception. msg)))))
 
 (defn- compare-source-types [t1 t2]
   (let [order [:main :derived-attr]]
