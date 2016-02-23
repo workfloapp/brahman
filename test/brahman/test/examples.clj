@@ -117,6 +117,10 @@
                                 :get-model (fn [courier model]
                                              (bm/get-model modeler
                                                            model))})]
+    ;; Assert there are no users in the beginning
+    (let [users (bm/query (bm/get-model modeler :user) '[*])]
+      (is (and (set? users) (empty? users))))
+
     ;; Dispatch an invalid create command with no user
     (let [cmd '(user/create)]
       (is (thrown? ExceptionInfo (bc/dispatch courier cmd))))
@@ -130,6 +134,17 @@
                                     :user/email "jeff@doe.name"
                                     :user/username "jeff"}})]
       (is (bc/dispatch courier cmd)))
+
+    ;; Assert there is a single user "jeff" now
+    (let [users (bm/query (bm/get-model modeler :user) '[*])]
+      (and (is (set? users))
+           (is (= (count users) 1))
+           (is (= (select-keys (first users) [:user/name
+                                              :user/email
+                                              :user/username])
+                  {:user/name "Jeff Doe"
+                   :user/email "jeff@doe.name"
+                   :user/username "jeff"}))))
 
     ;; Dispatch an invalid update command with no user
     (let [cmd '(user/update)]
