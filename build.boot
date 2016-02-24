@@ -4,7 +4,8 @@
  :source-paths #{"test"}
  :resource-paths #{"resources" "src"}
  :dependencies '[;; Boot
-                 [adzerk/boot-test "1.0.6"]
+                 [adzerk/boot-test "1.0.6" :scope "test"]
+                 [adzerk/bootlaces "0.1.13" :scope "test"]
 
                  ;; Language libraries
                  [org.clojure/clojure "1.8.0"]
@@ -21,11 +22,29 @@
                  ;; Tests
                  [org.clojure/test.check "0.9.0"]])
 
-(task-options!
- pom {:project 'brahman
-      :version "0.1.0-SNAPSHOT"})
+(require '[adzerk.boot-test :refer [test]]
+         '[adzerk.bootlaces :refer :all]
+         '[boot.git :refer [last-commit]])
 
-(require '[adzerk.boot-test :refer [test]])
+(def +project+ 'brahman)
+(def +version+ "0.1.0-SNAPSHOT")
+
+(bootlaces! +version+ :dont-modify-paths? true)
+
+(task-options!
+ pom  {:project        +project+
+       :version        +version+
+       :description    (str "A universe of backends for Om Next & "
+                            "other CQRS systems")
+       :url            "http:s//github.com/jannis/brahman"
+       :scm            {:url "https://github.com/jannis/brahman"}
+       :license        {"GNU Lesser General Public License 2.1"
+                        "http://www.gnu.org/licenses/lgpl-2.1.html"}}
+ push {:repo           "deploy-clojars"
+       :ensure-branch  "master"
+       :ensure-clean   true
+       :ensure-tag     (last-commit)
+       :ensure-version +version+})
 
 (deftask test-auto
   []
@@ -34,7 +53,20 @@
 
 (deftask install-local
   []
-  (comp
-   (pom)
-   (jar)
-   (install)))
+  (comp (pom)
+        (jar)
+        (install)))
+
+(deftask deploy-snapshot
+  []
+  (comp (pom)
+        (jar)
+        (build-jar)
+        (push-snapshot)))
+
+(deftask deploy-release
+  []
+  (comp (pom)
+        (jar)
+        (build-jar)
+        (push-release)))
