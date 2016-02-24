@@ -127,7 +127,11 @@
 ;;;; Modeler protocol
 
 (defprotocol IModeler
-  (get-model [this name]))
+  (get-model [this name] "Returns the model with the given name")
+  (schemas   [this]      "Returns a map of the following structure:
+                          {<store1 name> {<model1 name> <schema>
+                                          <model2 name> <schema>}
+                           ...}"))
 
 ;;;; Modeler implementation
 
@@ -137,33 +141,27 @@
                   (some #{store} (stores model))))
         models))
 
-(defn- collect-schemas
-  "Returns a map of the following structure:
-
-   {<store1 name> {<model1 name> <schema>
-                   <model2 name> <schema>}
-    ...}"
-  [models]
-  (letfn [(collect-step [res store]
-            (let [models  (models-for-store models store)
-                  schemas (map schema models)
-                  m       (zipmap models schemas)]
-              (update res store #(into {} (merge % m)))))]
-    (let [stores (set (apply concat (map stores models)))]
-      (reduce collect-step {} stores))))
-
 (defn- install-schemas!
   "Collects the schemas from all models"
   [modeler]
-  (let [config  (:config modeler)
-        models  (:models config)]
-    ((:install-schemas config) (collect-schemas models))))
+  (let [config (:config modeler)]
+    ((:install-schemas config) (schemas modeler))))
 
 (defrecord Modeler [config]
   IModeler
   (get-model [this name]
     (let [models (:models config)]
-      (first (filter #(= name (model-name %)) models)))))
+      (first (filter #(= name (model-name %)) models))))
+
+  (schemas [this]
+    (let [models (:models config)
+          stores (set (apply concat (map stores models)))]
+      (letfn [(collect-step [res store]
+                (let [models  (models-for-store models store)
+                      schemas (map schema models)
+                      m       (zipmap models schemas)]
+                  (update res store #(into {} (merge % m)))))]
+        (reduce collect-step {} stores)))))
 
 (defn- default-store-schema [schema]
   schema)
