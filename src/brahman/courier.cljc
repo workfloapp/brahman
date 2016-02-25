@@ -1,7 +1,8 @@
 (ns brahman.courier
-  (:import [clojure.lang ExceptionInfo])
+  #?(:clj (:import [clojure.lang ExceptionInfo]))
   (:refer-clojure :exclude [deliver])
-  (:require [brahman.model :as bm]))
+  (:require [brahman.model :as bm]
+   #?(:cljs [cljs.core :refer [ExceptionInfo]])))
 
 ;;;; Courier protocol
 
