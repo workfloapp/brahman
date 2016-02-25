@@ -101,8 +101,7 @@
 
 (defn deliver [courier cmd spec env]
   (let [config (:config courier)]
-    ((:deliver config) courier cmd))
-  true)
+    ((:deliver config) courier cmd env)))
 
 ;;;; Courier implementation
 
