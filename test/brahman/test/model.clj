@@ -67,7 +67,7 @@
                      :store values
                      :query (fn [{:keys [store]} _ _] store)})
           items   (bm/get-model modeler 'item)]
-      (is (= values (bm/query items nil))))))
+      (is (= values (bm/query items nil nil))))))
 
 (defspec queries-can-be-used-to-select-keys 10
   (prop/for-all [values (gen/vector (gen/map
@@ -89,7 +89,7 @@
                               (map (comp (partial into #{}) keys)
                                    (rest values)))]
       (is (= (into #{} (map #(select-keys % common-keys)) values)
-             (into #{} (bm/query items (into [] common-keys))))))))
+             (into #{} (bm/query nil items (into [] common-keys))))))))
 
 (defspec extracting-validation-rules-works 10
   (prop/for-all [attrs (gen/map

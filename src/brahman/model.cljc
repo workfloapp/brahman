@@ -20,8 +20,8 @@
   (stores     [this] "The stores used in the sources of this model")
   (attrs      [this] "Attributes for use in queries, computed from
                       the raw schema (with joins etc.)")
-  (query      [this q]
-              [this q extra]
+  (query      [this env q]
+              [this env q extra]
                      "Queries the model based on its data sources,
                       given the query q and extra information (e.g.
                       query clauses).")
@@ -29,57 +29,65 @@
 
 ;;; Source queries
 
-(defn- query-main
-  [{:keys [store schema->attrs query model]} source q extra]
+(defn- query-store
+  [{:keys [schema->attrs query-source model source] :as env} q extra]
   (let [attrs (or q (schema->attrs model))]
-    (query {:store store :model model}
-           (:query source)
-           {:inputs [attrs] :extra extra})))
+    (query-source env
+                  (:query source)
+                  {:inputs [attrs] :extra extra})))
 
 (defn- query-derived-attr
   [{:keys [data store entity-id merge-attr
-           query transform model]} source]
-  (mapv (fn [entity]
-          (let [id      (entity-id entity)
-                raw     (query {:store store :model model}
-                               (:query source)
-                               {:inputs [id]})
-                tformed (cond->> raw
-                          (:transform source)
-                          (transform (:transform source)))]
-            (merge-attr (schema model) entity
-                        (:name source) tformed)))
+           query-source transform model] :as env} source]
+  (into #{}
+        (map (fn [entity]
+               (let [id      (entity-id entity)
+                     raw     (query-source env
+                                           (:query source)
+                                           {:inputs [id]})
+                     tformed (cond->> raw
+                               (:transform source)
+                               (transform (:transform source)))]
+                 (merge-attr (schema model) entity
+                             (:name source) tformed))))
         data))
 
-(defmulti ^:private query-sources (fn [_ _ _ _ [type _]] type))
+(defmulti ^:private query-sources (fn [_ _ _ _ _ [type _]] type))
 
-(defmethod query-sources :main
-  [model q extra data [type sources]]
-  (let [config     (:config model)
-        merge-main (:merge-main config)]
+(defmethod query-sources :store
+  [model env q extra data [type sources]]
+  (let [config       (:config model)
+        merge-source (:merge-source config)]
     (reduce (fn [data source]
-              (let [env   (merge config {:model model :data data})
-                    sdata (query-main env source q extra)]
-                (merge-main data sdata)))
+              (let [env'  (merge env config {:model  model
+                                             :data   data
+                                             :source source})
+                    sdata (query-store env' q extra)]
+                (merge-source source data sdata)))
             data
             sources)))
 
 (defmethod query-sources :derived-attr
-  [model _ _ ret [type sources]]
+  [model env _ _ data [type sources]]
   (let [config (:config model)]
     (reduce (fn [ret source]
-              (let [env (merge config {:model model :data ret})]
-                (query-derived-attr env source)))
-            ret sources)))
+              (let [env' (merge env config {:model  model
+                                            :data   data
+                                            :source source})]
+                (query-derived-attr env' source)))
+            data
+            sources)))
 
 (defmethod query-sources :default
-  [_ _ _ _ [type _]]
+  [_ _ _ _ _ [type _]]
   (let [msg (str "Unknown source type: " type)]
     (throw #?(:cljs (js/Error. msg)
               :clj  (Exception. msg)))))
 
 (defn- compare-source-types [t1 t2]
-  (let [order [:main :derived-attr]]
+  (let [order (let [types [:store :derived-attr]]
+                #?(:cljs (to-array types)
+                   :clj  types))]
     (compare (.indexOf order t1) (.indexOf order t2))))
 
 ;;;; Model implementation
@@ -104,14 +112,14 @@
   (attrs [this]
     ((:schema->attrs config) this))
 
-  (query [this q]
-    (query this q nil))
+  (query [this env q]
+    (query this env q nil))
 
-  (query [this q extra]
+  (query [this env q extra]
     (let [sources (sources this)
           sorted  (sort-by :type compare-source-types sources)
           grouped (group-by :type sorted)]
-      (reduce #(query-sources this q extra %1 %2)
+      (reduce #(query-sources this env q extra %1 %2)
               nil
               grouped)))
 
@@ -200,11 +208,17 @@
   true)
 
 (defn- default-query-source
-  [store model query {:keys [inputs extra]}]
-  store)
+  [env query {:keys [inputs extra]}]
+  nil)
 
 (defn- default-transform [tspec raw-value]
   (tspec raw-value))
+
+(defn- default-merge-source
+  [source data source-data]
+  (-> #{}
+      (into data)
+      (into source-data)))
 
 (defn modeler
   [{:keys [models
@@ -214,6 +228,7 @@
            validate
            entity-id
            query-source
+           merge-source
            transform]
     :or {models          []
          merge-model     default-merge-model
@@ -222,6 +237,7 @@
          validate        default-validate
          entity-id       identity
          query-source    default-query-source
+         merge-source    default-merge-source
          transform       default-transform}
     :as config}]
   {:pre [(map? config)]}
@@ -232,6 +248,7 @@
                        :validate        validate
                        :schema->attrs   schema->attrs
                        :query-source    query-source
+                       :merge-source    merge-source
                        :transform       transform}
         models'       (for [model-spec merged-models]
                         (model model-spec config'))

@@ -31,12 +31,14 @@
     (case store
       :datomic (bd/install-schemas (connect-to-db) models))))
 
-(defn query-source [])
+(defn query-source
+  [env query extra])
 
 ;;;; Courier configuration
 
-(defn deliver-command [courier cmd]
-  (println "DELIVER COMMAND" cmd))
+(defn deliver-command [courier cmd env]
+  (println "DELIVER COMMAND" cmd env)
+  true)
 
 ;;;; Tests
 
@@ -118,7 +120,7 @@
                                              (bm/get-model modeler
                                                            model))})]
     ;; Assert there are no users in the beginning
-    (let [users (bm/query (bm/get-model modeler :user) '[*])]
+    (let [users (bm/query (bm/get-model modeler :user) nil '[*])]
       (is (and (set? users) (empty? users))))
 
     ;; Dispatch an invalid create command with no user
@@ -136,15 +138,15 @@
       (is (bc/dispatch courier cmd)))
 
     ;; Assert there is a single user "jeff" now
-    (let [users (bm/query (bm/get-model modeler :user) '[*])]
+    (let [users (bm/query (bm/get-model modeler :user) nil '[*])]
       (and (is (set? users))
-           (is (= (count users) 1))
-           (is (= (select-keys (first users) [:user/name
-                                              :user/email
-                                              :user/username])
-                  {:user/name "Jeff Doe"
+           (is (= 1 (count users)))
+           (is (= {:user/name "Jeff Doe"
                    :user/email "jeff@doe.name"
-                   :user/username "jeff"}))))
+                   :user/username "jeff"}
+                  (select-keys (first users) [:user/name
+                                              :user/email
+                                              :user/username])))))
 
     ;; Dispatch an invalid update command with no user
     (let [cmd '(user/update)]
