@@ -3,7 +3,7 @@
   (:require [clojure.test :refer [deftest is]]
             [datomic.api :as d]))
 
-(def db-uri "datomic:free://localhost:4334/brahman-test")
+(def db-uri "datomic:mem://brahman-test")
 
 (defn create-db []
   (d/create-database db-uri))
