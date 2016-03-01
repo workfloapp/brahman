@@ -48,8 +48,7 @@
                      tformed (cond->> raw
                                (:transform source)
                                (transform (:transform source)))]
-                 (merge-attr (schema model) entity
-                             (:name source) tformed))))
+                 (merge-attr (schema model) entity source tformed))))
         data))
 
 (defmulti ^:private query-sources (fn [_ _ _ _ _ [type _]] type))
@@ -220,6 +219,14 @@
       (into data)
       (into source-data)))
 
+(defn- default-merge-attr
+  [schema entity source value]
+  (let [attr (if (:prefixed? source)
+               (keyword (name (:name schema))
+                        (name (:name source)))
+               (keyword (name (:name source))))]
+    (assoc entity attr value)))
+
 (defn modeler
   [{:keys [models
            merge-model
@@ -229,6 +236,7 @@
            entity-id
            query-source
            merge-source
+           merge-attr
            transform]
     :or {models          []
          merge-model     default-merge-model
@@ -238,6 +246,7 @@
          entity-id       identity
          query-source    default-query-source
          merge-source    default-merge-source
+         merge-attr      default-merge-attr
          transform       default-transform}
     :as config}]
   {:pre [(map? config)]}
@@ -249,6 +258,7 @@
                        :schema->attrs   schema->attrs
                        :query-source    query-source
                        :merge-source    merge-source
+                       :merge-attr      merge-attr
                        :transform       transform}
         models'       (for [model-spec merged-models]
                         (model model-spec config'))
