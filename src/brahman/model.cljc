@@ -133,6 +133,30 @@
                                           <model2 name> <schema>}
                            ...}"))
 
+;;;; Model merging
+
+(defn merge-model-field
+  [field1 field2]
+  (cond
+    (and (vector? field1) (vector? field2)) (concat field1 field2)
+    (and (map? field1) (map? field2))       (merge field1 field2)
+    (= field1 field2)                       field1))
+
+(defn default-merge-model
+  "Merges a model into a resulting model."
+  [res model]
+  (merge-with merge-model-field res model))
+
+(defn merge-model-group
+  [merge-model [name group]]
+  (reduce merge-model {} group))
+
+(defn merge-models
+  "Merges all models with the same name."
+  [merge-model models]
+  (let [grouped (group-by :name models)]
+    (mapv #(merge-model-group merge-model %) grouped)))
+
 ;;;; Modeler implementation
 
 (defn- models-for-store [models store]
@@ -184,6 +208,7 @@
 
 (defn modeler
   [{:keys [models
+           merge-model
            install-schemas
            schema->attrs
            validate
@@ -191,6 +216,7 @@
            query-source
            transform]
     :or {models          []
+         merge-model     default-merge-model
          install-schemas (constantly nil)
          schema->attrs   default-schema->attrs
          validate        default-validate
@@ -199,15 +225,16 @@
          transform       default-transform}
     :as config}]
   {:pre [(map? config)]}
-  (let [config'  {:models          models
-                  :install-schemas install-schemas
-                  :entity-id       entity-id
-                  :validate        validate
-                  :schema->attrs   schema->attrs
-                  :query-source    query-source
-                  :transform       transform}
-        models'  (for [model-spec models]
-                   (model model-spec config'))
-        modeler' (Modeler. (assoc config' :models models'))]
+  (let [merged-models (merge-models merge-model models)
+        config'       {:models          merged-models
+                       :install-schemas install-schemas
+                       :entity-id       entity-id
+                       :validate        validate
+                       :schema->attrs   schema->attrs
+                       :query-source    query-source
+                       :transform       transform}
+        models'       (for [model-spec merged-models]
+                        (model model-spec config'))
+        modeler'      (Modeler. (assoc config' :models models'))]
     (install-schemas! modeler')
     modeler'))
