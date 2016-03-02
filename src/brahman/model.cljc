@@ -13,19 +13,30 @@
 ;;;; Model protocol
 
 (defprotocol IModel
-  (model-name [this] "The name of the model as a symbol")
-  (schema     [this] "The raw schema as specified originally")
-  (validation [this] "Validation rules defined for the model")
-  (sources    [this] "Data sources used in this model")
-  (stores     [this] "The stores used in the sources of this model")
-  (attrs      [this] "Attributes for use in queries, computed from
-                      the raw schema (with joins etc.)")
-  (query      [this env q]
-              [this env q extra]
-                     "Queries the model based on its data sources,
-                      given the query q and extra information (e.g.
-                      query clauses).")
-  (validate   [this data]))
+  (model-name  [this] "The name of the model as a symbol")
+  (schema      [this] "The raw schema as specified originally")
+  (validation  [this] "Validation rules defined for the model")
+  (sources     [this] "Data sources used in this model")
+  (stores      [this] "The stores used in the sources of this model")
+  (attrs       [this] "Attributes for use in queries, computed from
+                       the raw schema (with joins etc.)")
+  (get-modeler [this] "Returns the modeler that manages the models.")
+  (query       [this env q]
+               [this env q extra]
+                      "Queries the model based on its data sources,
+                       given the query q and extra information (e.g.
+                       query clauses).")
+  (validate    [this data]))
+
+;;;; Modeler protocol
+
+(defprotocol IModeler
+  (models    [this]      "Returns all models known to the modeler.")
+  (get-model [this name] "Returns the model with the given name")
+  (schemas   [this]      "Returns a map of the following structure:
+                          {<store1 name> {<model1 name> <schema>
+                                          <model2 name> <schema>}
+                           ...}"))
 
 ;;; Source queries
 
@@ -91,7 +102,7 @@
 
 ;;;; Model implementation
 
-(defrecord Model [props config]
+(defrecord Model [props config modeler]
   IModel
   (model-name [this]
     (:name props))
@@ -111,6 +122,9 @@
   (attrs [this]
     ((:schema->attrs config) this))
 
+  (get-modeler [this]
+    modeler)
+
   (query [this env q]
     (query this env q nil))
 
@@ -127,18 +141,10 @@
       ((:validate config) this (validation this) data))))
 
 (defn model
-  [{:keys [schema] :as props} config]
-  {:pre [(map? schema)]}
-  (Model. props config))
-
-;;;; Modeler protocol
-
-(defprotocol IModeler
-  (get-model [this name] "Returns the model with the given name")
-  (schemas   [this]      "Returns a map of the following structure:
-                          {<store1 name> {<model1 name> <schema>
-                                          <model2 name> <schema>}
-                           ...}"))
+  [{:keys [schema] :as props} config modeler]
+  {:pre [(map? schema)
+         (satisfies? IModeler modeler)]}
+  (Model. props config modeler))
 
 ;;;; Model merging
 
@@ -178,21 +184,23 @@
   (let [config (:config modeler)]
     ((:install-schemas config) (schemas modeler))))
 
-(defrecord Modeler [config]
+(defrecord Modeler [config models]
   IModeler
+  (models [this]
+    @models)
+
   (get-model [this name]
-    (let [models (:models config)]
-      (first (filter #(= name (model-name %)) models))))
+    (first (filter #(= name (model-name %)) @models)))
 
   (schemas [this]
-    (let [models (:models config)
-          stores (set (apply concat (map stores models)))]
-      (letfn [(collect-step [res store]
-                (let [models  (models-for-store models store)
-                      schemas (map schema models)
-                      m       (zipmap models schemas)]
-                  (update res store #(into {} (merge % m)))))]
-        (reduce collect-step {} stores)))))
+    (let [models @models]
+      (let [stores (set (apply concat (map stores models)))]
+        (letfn [(collect-step [res store]
+                  (let [models  (models-for-store models store)
+                        schemas (map schema models)
+                        m       (zipmap models schemas)]
+                    (update res store #(into {} (merge % m)))))]
+          (reduce collect-step {} stores))))))
 
 (defn- default-store-schema [schema]
   schema)
@@ -250,9 +258,7 @@
          transform       default-transform}
     :as config}]
   {:pre [(map? config)]}
-  (let [merged-models (merge-models merge-model models)
-        config'       {:models          merged-models
-                       :install-schemas install-schemas
+  (let [config        {:install-schemas install-schemas
                        :entity-id       entity-id
                        :validate        validate
                        :schema->attrs   schema->attrs
@@ -260,8 +266,11 @@
                        :merge-source    merge-source
                        :merge-attr      merge-attr
                        :transform       transform}
-        models'       (for [model-spec merged-models]
-                        (model model-spec config'))
-        modeler'      (Modeler. (assoc config' :models models'))]
-    (install-schemas! modeler')
-    modeler'))
+        model-specs   (merge-models merge-model models)
+        models        (atom #{})
+        modeler       (Modeler. config models)]
+    (doseq [model-spec model-specs]
+      (let [model' (model model-spec config modeler)]
+        (swap! models conj model')))
+    (install-schemas! modeler)
+    modeler))
