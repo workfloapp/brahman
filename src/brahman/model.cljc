@@ -1,5 +1,6 @@
 (ns brahman.model
-  (:require [com.rpl.specter :as s]))
+  (:require [com.rpl.specter :as s]
+            [om.next.impl.parser :as om-parser]))
 
 ;;;; Transformations
 
@@ -10,23 +11,32 @@
     (cond-> res
       (not (coll? raw-data)) first)))
 
+;;;; Utilities
+
+(defn collection?
+  [query-result]
+  (and (coll? query-result)
+       (not (map? query-result))))
+
 ;;;; Model protocol
 
 (defprotocol IModel
-  (model-name  [this] "The name of the model as a symbol")
-  (schema      [this] "The raw schema as specified originally")
-  (validation  [this] "Validation rules defined for the model")
-  (sources     [this] "Data sources used in this model")
-  (stores      [this] "The stores used in the sources of this model")
-  (attrs       [this] "Attributes for use in queries, computed from
-                       the raw schema (with joins etc.)")
-  (get-modeler [this] "Returns the modeler that manages the models.")
-  (query       [this env q]
-               [this env q extra]
-                      "Queries the model based on its data sources,
-                       given the query q and extra information (e.g.
-                       query clauses).")
-  (validate    [this data]))
+  (model-name    [this] "The name of the model as a symbol")
+  (schema        [this] "The raw schema as specified originally")
+  (validation    [this] "Validation rules defined for the model")
+  (stores        [this] "The data stores used in this model")
+  (derived-attrs [this] "The derived attributes used in this model")
+  (attrs         [this] "Attributes for use in queries, computed
+                         from the raw schema (with joins etc.)")
+  (get-modeler   [this] "Returns the modeler that manages the
+                         models.")
+  (query         [this env q]
+                 [this env q extra]
+                        "Queries the model based on its data
+                         stores and derived attributes, given the
+                         query q and extra information (e.g. query
+                         clauses).")
+  (validate      [this data]))
 
 ;;;; Modeler protocol
 
@@ -38,67 +48,84 @@
                                           <model2 name> <schema>}
                            ...}"))
 
-;;; Source queries
+;;;; Query execution
 
-(defn- query-store
-  [{:keys [schema->attrs query-source model source] :as env} q extra]
+(defn query-derived-attr
+  [{:keys [merge-derived-attr model query-derived-attr] :as env}
+   attr attr-q result]
+  (letfn [(derive-attr [entity]
+            (->> (query-derived-attr env attr attr-q entity)
+                 (merge-derived-attr model entity attr)))]
+    (if (collection? result)
+      (mapv derive-attr result)
+      (derive-attr result))))
+
+(defn has-join-attr?
+  [query-result attr-name]
+  (if (collection? query-result)
+    (contains? (first query-result) attr-name)
+    (contains? query-result attr-name)))
+
+(declare query-derived-attrs)
+(declare extract-attr-query)
+
+(defn query-derived-attrs-follow-joins
+  [model env q query-result]
+  (let [config (:config model)
+        joins  ((:schema->joins config) model)]
+    (reduce (fn [query-result [attr-name attr :as join]]
+              (letfn [(follow-join [entity-or-entities]
+                        (query-derived-attrs (:model attr) env
+                                             (extract-attr-query q
+                                                                 attr-name)
+                                             entity-or-entities))]
+                (if (has-join-attr? query-result attr-name)
+                  (if (collection? query-result)
+                    (mapv #(update % attr-name follow-join) query-result)
+                    (update query-result attr-name follow-join))
+                  query-result)))
+            query-result
+            joins)))
+
+(defn extract-attr-query
+  [q attr-name]
+  (let [ast   (om-parser/query->ast q)
+        prop  (first (filter #(= attr-name (:key %)) (:children ast)))
+        query (:query prop)]
+    query))
+
+(defn query-derived-attrs
+  [model env q query-result]
+  (let [config (:config model)
+        result (reduce (fn [query-result {:keys [name] :as attr}]
+                         (let [env'   (merge env config {:model model})
+                               attr-q (extract-attr-query q name)]
+                           (query-derived-attr env'
+                                               attr attr-q
+                                               query-result)))
+                       query-result
+                       (derived-attrs model))
+        result (query-derived-attrs-follow-joins model env q result)]
+    result))
+
+(defn query-store
+  [{:keys [schema->attrs query-store model store] :as env} q extra]
   (let [attrs (or q (schema->attrs model))]
-    (query-source env
-                  (:query source)
-                  {:inputs [attrs] :extra extra})))
+    (query-store env
+                 (:query store)
+                 {:inputs [attrs] :extra extra})))
 
-(defn- query-derived-attr
-  [{:keys [data store entity-id merge-attr
-           query-source transform model] :as env} source]
-  (into #{}
-        (map (fn [entity]
-               (let [id      (entity-id entity)
-                     raw     (query-source env
-                                           (:query source)
-                                           {:inputs [id]})
-                     tformed (cond->> raw
-                               (:transform source)
-                               (transform (:transform source)))]
-                 (merge-attr (schema model) entity source tformed))))
-        data))
-
-(defmulti ^:private query-sources (fn [_ _ _ _ _ [type _]] type))
-
-(defmethod query-sources :store
-  [model env q extra data [type sources]]
-  (let [config       (:config model)
-        merge-source (:merge-source config)]
-    (reduce (fn [data source]
-              (let [env'  (merge env config {:model  model
-                                             :data   data
-                                             :source source})
-                    sdata (query-store env' q extra)]
-                (merge-source source data sdata)))
-            data
-            sources)))
-
-(defmethod query-sources :derived-attr
-  [model env _ _ data [type sources]]
-  (let [config (:config model)]
-    (reduce (fn [ret source]
-              (let [env' (merge env config {:model  model
-                                            :data   data
-                                            :source source})]
-                (query-derived-attr env' source)))
-            data
-            sources)))
-
-(defmethod query-sources :default
-  [_ _ _ _ _ [type _]]
-  (let [msg (str "Unknown source type: " type)]
-    (throw #?(:cljs (js/Error. msg)
-              :clj  (Exception. msg)))))
-
-(defn- compare-source-types [t1 t2]
-  (let [order (let [types [:store :derived-attr]]
-                #?(:cljs (to-array types)
-                   :clj  types))]
-    (compare (.indexOf order t1) (.indexOf order t2))))
+(defn query-stores
+  [model env q extra]
+  (let [config      (:config model)
+        merge-store (:merge-store config)]
+    (reduce (fn [ret store]
+              (let [env'   (merge env config {:model model
+                                              :store store})
+                    result (query-store env' q extra)]
+                (merge-store store ret result)))
+            nil
+            (stores model))))
 
 ;;;; Model implementation
 
@@ -113,11 +140,11 @@
   (validation [this]
     (:validation props))
 
-  (sources [this]
-    (:sources props))
-
   (stores [this]
-    (set (remove nil? (map :store (sources this)))))
+    (:stores props))
+
+  (derived-attrs [this]
+    (:derived-attrs props))
 
   (attrs [this]
     ((:schema->attrs config) this))
@@ -129,12 +156,9 @@
     (query this env q nil))
 
   (query [this env q extra]
-    (let [sources (sources this)
-          sorted  (sort-by :type compare-source-types sources)
-          grouped (group-by :type sorted)]
-      (reduce #(query-sources this env q extra %1 %2)
-              nil
-              grouped)))
+    (let [store-results    (query-stores this env q extra)
+          combined-results (query-derived-attrs this env q store-results)]
+      combined-results))
 
   (validate [this data]
     (let [config (:config this)]
@@ -211,61 +235,76 @@
 (defn- default-schema->attrs [model]
   [])
 
+(defn- default-schema->joins [model]
+  {})
+
 (defn- default-validate [model data]
   true)
 
-(defn- default-query-source
+(defn- default-query-store
   [env query {:keys [inputs extra]}]
+  nil)
+
+(defn- default-query-derived-attr
+  [env attr query entity]
   nil)
 
 (defn- default-transform [tspec raw-value]
   (tspec raw-value))
 
-(defn- default-merge-source
-  [source data source-data]
+(defn- default-merge-store
+  [store data store-data]
   (-> #{}
       (into data)
-      (into source-data)))
+      (into store-data)))
 
-(defn- default-merge-attr
-  [schema entity source value]
-  (let [attr (if (:prefixed? source)
-               (keyword (name (:name schema))
-                        (name (:name source)))
-               (keyword (name (:name source))))]
-    (assoc entity attr value)))
+(defn- default-merge-derived-attr
+  [model entity attr value]
+  (let [schema    (schema model)
+        attr-name (if (:prefixed? attr)
+                    (keyword (name (:name schema))
+                             (name (:name attr)))
+                    (keyword (namespace (:name attr))
+                             (name (:name attr))))]
+    (assoc entity attr-name value)))
 
 (defn modeler
   [{:keys [models
            merge-model
            install-schemas
            schema->attrs
+           schema->joins
            validate
            entity-id
-           query-source
-           merge-source
-           merge-attr
+           query-store
+           query-derived-attr
+           merge-store
+           merge-derived-attr
            transform]
-    :or {models          []
-         merge-model     default-merge-model
-         install-schemas (constantly nil)
-         schema->attrs   default-schema->attrs
-         validate        default-validate
-         entity-id       identity
-         query-source    default-query-source
-         merge-source    default-merge-source
-         merge-attr      default-merge-attr
-         transform       default-transform}
+    :or {models             []
+         merge-model        default-merge-model
+         install-schemas    (constantly nil)
+         schema->attrs      default-schema->attrs
+         schema->joins      default-schema->joins
+         validate           default-validate
+         entity-id          identity
+         query-store        default-query-store
+         query-derived-attr default-query-derived-attr
+         merge-store        default-merge-store
+         merge-derived-attr default-merge-derived-attr
+         transform          default-transform}
     :as config}]
   {:pre [(map? config)]}
-  (let [config        {:install-schemas install-schemas
-                       :entity-id       entity-id
-                       :validate        validate
-                       :schema->attrs   schema->attrs
-                       :query-source    query-source
-                       :merge-source    merge-source
-                       :merge-attr      merge-attr
-                       :transform       transform}
+  (let [config        {:install-schemas    install-schemas
+                       :entity-id          entity-id
+                       :validate           validate
+                       :schema->attrs      schema->attrs
+                       :schema->joins      schema->joins
+                       :query-store        query-store
+                       :query-derived-attr query-derived-attr
+                       :merge-store        merge-store
+                       :merge-derived-attr merge-derived-attr
+                       :transform          transform}
         model-specs   (merge-models merge-model models)
         models        (atom #{})
         modeler       (Modeler. config models)]
