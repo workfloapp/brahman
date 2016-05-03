@@ -6,7 +6,7 @@
 
 ;;;; Schema attribute extraction
 
-(def schema->attrs bds/schema->attrs)
+(def model->attrs bds/model->attrs)
 
 ;;;; Schema generation
 

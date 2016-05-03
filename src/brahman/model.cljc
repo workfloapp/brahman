@@ -72,7 +72,7 @@
 (defn query-derived-attrs-follow-joins
   [model env q query-result]
   (let [config (:config model)
-        joins  ((:schema->joins config) model)]
+        joins  ((:model->joins config) model)]
     (reduce (fn [query-result [attr-name attr :as join]]
               (letfn [(follow-join [entity-or-entities]
                         (query-derived-attrs (:model attr) env
@@ -109,8 +109,8 @@
     result))
 
 (defn query-store
-  [{:keys [schema->attrs query-store model store] :as env} q extra]
-  (let [attrs (or q (schema->attrs model))]
+  [{:keys [model->attrs query-store model store] :as env} q extra]
+  (let [attrs (or q (model->attrs model))]
     (query-store env
                  (:query store)
                  {:inputs [attrs] :extra extra})))
@@ -147,7 +147,7 @@
     (:derived-attrs props))
 
   (attrs [this]
-    ((:schema->attrs config) this))
+    ((:model->attrs config) this))
 
   (get-modeler [this]
     modeler)
@@ -232,10 +232,10 @@
 (defn- default-validation [model]
   nil)
 
-(defn- default-schema->attrs [model]
+(defn- default-model->attrs [model]
   [])
 
-(defn- default-schema->joins [model]
+(defn- default-model->joins [model]
   {})
 
 (defn- default-validate [model data]
@@ -272,8 +272,8 @@
   [{:keys [models
            merge-model
            install-schemas
-           schema->attrs
-           schema->joins
+           model->attrs
+           model->joins
            validate
            entity-id
            query-store
@@ -284,8 +284,8 @@
     :or {models             []
          merge-model        default-merge-model
          install-schemas    (constantly nil)
-         schema->attrs      default-schema->attrs
-         schema->joins      default-schema->joins
+         model->attrs       default-model->attrs
+         model->joins       default-model->joins
          validate           default-validate
          entity-id          identity
          query-store        default-query-store
@@ -298,8 +298,8 @@
   (let [config        {:install-schemas    install-schemas
                        :entity-id          entity-id
                        :validate           validate
-                       :schema->attrs      schema->attrs
-                       :schema->joins      schema->joins
+                       :model->attrs       model->attrs
+                       :model->joins       model->joins
                        :query-store        query-store
                        :query-derived-attr query-derived-attr
                        :merge-store        merge-store
