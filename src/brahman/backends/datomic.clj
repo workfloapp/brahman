@@ -10,17 +10,8 @@
 
 ;;;; Schema generation
 
-(defn- kv->field [res [k v]]
-  (cond
-    (vector? v) (conj res (into [] (concat [k] v)))
-    (map? v)    (kv->field res [k (ffirst v)])
-    :else       (conj res [k v])))
-
-(defn- attrs->fields [schema]
-  (reduce kv->field [] schema))
-
 (defn datomic-schema [[model attrs]]
-  (let [fields (attrs->fields attrs)]
+  (let [fields (bds/attrs->fields attrs)]
     (eval `(s/schema ~(bm/model-name model)
                      (s/fields ~@fields)))))
 
