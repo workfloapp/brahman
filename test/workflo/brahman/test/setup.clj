@@ -1,4 +1,4 @@
-(ns brahman.test.setup
+(ns workflo.brahman.test.setup
   (:import [datomic.peer Connection])
   (:require [clojure.test :refer [deftest is]]
             [datomic.api :as d]))

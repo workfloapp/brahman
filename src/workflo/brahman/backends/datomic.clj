@@ -1,8 +1,8 @@
-(ns brahman.backends.datomic
+(ns workflo.brahman.backends.datomic
   (:require [datomic.api :as d]
             [datomic-schema.schema :as s]
-            [brahman.backends.datascript :as bds]
-            [brahman.model :as bm]))
+            [workflo.brahman.backends.datascript :as bds]
+            [workflo.brahman.model :as bm]))
 
 ;;;; Schema attribute extraction
 

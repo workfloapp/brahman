@@ -1,5 +1,5 @@
-(ns brahman.backends.datascript
-  (:require [brahman.model :as bm]))
+(ns workflo.brahman.backends.datascript
+  (:require [workflo.brahman.model :as bm]))
 
 ;;;; Schema attribute extraction
 

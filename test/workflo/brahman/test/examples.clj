@@ -1,18 +1,19 @@
-(ns brahman.test.examples
+(ns workflo.brahman.test.examples
   (:import [clojure.lang ExceptionInfo])
   (:require [bouncer.core :as b]
             [bouncer.validators :as v]
             [clojure.pprint :refer [pprint]]
             [clojure.test :refer [deftest is use-fixtures]]
             [com.rpl.specter :as s]
-            [brahman.authnz :as ba]
-            [brahman.courier :as bc]
-            [brahman.model :as bm]
-            [brahman.backends.datomic :as bd]
-            [brahman.test.setup :as setup :refer [create-db
-                                                  delete-db
-                                                  with-conn
-                                                  connect-to-db]]))
+            [workflo.brahman.authnz :as ba]
+            [workflo.brahman.courier :as bc]
+            [workflo.brahman.model :as bm]
+            [workflo.brahman.backends.datomic :as bd]
+            [workflo.brahman.test.setup :as setup
+             :refer [create-db
+                     delete-db
+                     with-conn
+                     connect-to-db]]))
 
 ;;;; Datomic setup
 

@@ -1,4 +1,4 @@
-(ns brahman.model
+(ns workflo.brahman.model
   (:require [com.rpl.specter :as s]
             [om.next.impl.parser :as om-parser]))
 

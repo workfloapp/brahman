@@ -1,4 +1,4 @@
-(ns brahman.authnz
+(ns workflo.brahman.authnz
   (:refer-clojure :exclude [set?]))
 
 (defn set? [x]

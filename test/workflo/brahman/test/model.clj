@@ -1,11 +1,11 @@
-(ns brahman.test.model
+(ns workflo.brahman.test.model
   (:require [clojure.pprint :refer [pprint]]
             [clojure.test.check.clojure-test :refer [defspec]]
             [clojure.test :refer [deftest is use-fixtures]]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
             [com.rpl.specter :as specter :refer :all]
-            [brahman.model :as bm]))
+            [workflo.brahman.model :as bm]))
 
 ;;;; Specter transformations
 
