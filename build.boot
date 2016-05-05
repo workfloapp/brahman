@@ -26,7 +26,7 @@
          '[adzerk.bootlaces :refer :all]
          '[boot.git :refer [last-commit]])
 
-(def +project+ 'brahman)
+(def +project+ 'workflo/brahman)
 (def +version+ "0.3.0-SNAPSHOT")
 
 (bootlaces! +version+ :dont-modify-paths? true)
@@ -36,8 +36,8 @@
        :version        +version+
        :description    (str "A universe of backends for Om Next & "
                             "other CQRS systems")
-       :url            "http:s//github.com/jannis/brahman"
-       :scm            {:url "https://github.com/jannis/brahman"}
+       :url            "https://github.com/workfloapp/brahman"
+       :scm            {:url "https://github.com/workfloapp/brahman"}
        :license        {"GNU Lesser General Public License 2.1"
                         "http://www.gnu.org/licenses/lgpl-2.1.html"}}
  push {:repo           "deploy-clojars"

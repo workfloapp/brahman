@@ -67,6 +67,6 @@ TODO
 
 ## License
 
-Brahman is (C) 2016 Jannis Pohlmann.
+Brahman is (C) 2016 Workflo, Inc. & Jannis Pohlmann.
 
 It is licensed under GNU LGPL 2.1. For more details see LICENSE.txt.
