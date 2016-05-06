@@ -112,9 +112,7 @@
 (defn query-store
   [{:keys [model->attrs query-store model store] :as env} q extra]
   (let [attrs (or q (model->attrs model))]
-    (query-store env
-                 (:query store)
-                 {:inputs [attrs] :extra extra})))
+    (query-store env q {:inputs [attrs] :extra extra})))
 
 (defn query-stores
   [model env q extra]
