@@ -18,6 +18,7 @@
                  ;; Others
                  [bouncer "1.0.0"]
                  [com.rpl/specter "0.9.1"]
+                 [org.omcljs/om "1.0.0-alpha32"]
 
                  ;; Tests
                  [org.clojure/test.check "0.9.0"]])
