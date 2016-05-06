@@ -168,7 +168,7 @@
 
 (defn model
   [{:keys [schema] :as props} config modeler]
-  {:pre [(map? schema)
+  {:pre [(or (nil? schema) (map? schema))
          (satisfies? IModeler modeler)]}
   (Model. props config modeler))
 
