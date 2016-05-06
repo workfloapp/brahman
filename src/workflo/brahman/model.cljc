@@ -30,7 +30,8 @@
                          from the raw schema (with joins etc.)")
   (get-modeler   [this] "Returns the modeler that manages the
                          models.")
-  (query         [this env q]
+  (query         [this q]
+                 [this env q]
                  [this env q extra]
                         "Queries the model based on its data
                          stores and derived attributes, given the
@@ -151,6 +152,9 @@
 
   (get-modeler [this]
     modeler)
+
+  (query [this q]
+    (query this {} q nil))
 
   (query [this env q]
     (query this env q nil))

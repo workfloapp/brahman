@@ -121,7 +121,7 @@
                                              (bm/get-model modeler
                                                            model))})]
     ;; Assert there are no users in the beginning
-    (let [users (bm/query (bm/get-model modeler :user) nil '[*])]
+    (let [users (bm/query (bm/get-model modeler :user) '[*])]
       (is (and (set? users) (empty? users))))
 
     ;; Dispatch an invalid create command with no user
@@ -139,7 +139,7 @@
       (is (bc/dispatch courier cmd)))
 
     ;; Assert there is a single user "jeff" now
-    (let [users (bm/query (bm/get-model modeler :user) nil '[*])]
+    (let [users (bm/query (bm/get-model modeler :user) '[*])]
       (and (is (set? users))
            (is (= 1 (count users)))
            (is (= {:user/name "Jeff Doe"
