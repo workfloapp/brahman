@@ -61,7 +61,7 @@
 (defspec vectors-can-be-used-as-dbs 10
   (prop/for-all [values (gen/vector gen/any)]
     (let [item    {:schema {:name 'item}
-                   :sources [{:type :main}]}
+                   :stores [:datomic]}
           modeler (bm/modeler
                     {:models [item]
                      :store values
@@ -76,7 +76,7 @@
                                      {:num-elements 200})
                                     10)]
     (let [item        {:schema {:name 'item}
-                       :sources [{:type :main}]}
+                       :stores [:datomic]}
           modeler     (bm/modeler
                         {:models [item]
                          :store values
@@ -97,7 +97,7 @@
                         (gen/vector gen/simple-type))]
     (let [item        {:schema {:name 'item
                                 :attrs attrs}
-                       :sources [{:type :main}]}
+                       :stores [:datomic]}
           ;; This validation extractor function assumes
           ;; the validation rules for each attribute is
           ;; the first keyword in each attribute spec.

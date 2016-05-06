@@ -5,6 +5,7 @@
             [clojure.pprint :refer [pprint]]
             [clojure.test :refer [deftest is use-fixtures]]
             [com.rpl.specter :as s]
+            [datomic.api :as d]
             [workflo.brahman.authnz :as ba]
             [workflo.brahman.courier :as bc]
             [workflo.brahman.model :as bm]
@@ -32,57 +33,68 @@
     (case store
       :datomic (bd/install-schemas (connect-to-db) models))))
 
-(defn query-source
-  [env query extra])
+(defn query-store
+  [{:keys [store] :as env} query extra]
+  (with-conn
+    (case store
+      :datomic (d/q `[:find [(~'pull ~'?user ~query)]
+                      :where [~'?user :user/name]]
+                    (d/db conn)))))
 
 ;;;; Courier configuration
 
-(defn deliver-command [courier cmd env]
-  (println "DELIVER COMMAND" cmd env)
-  true)
+(defmulti deliver-command (fn [_ [key _] _] key))
+
+(defmethod deliver-command 'user/create
+  [courier [_ params] env]
+  (with-conn
+    (let [tempid (d/tempid :db.part/app)]
+      @(d/transact conn [(merge {:db/id tempid}
+                                (:user params))]))))
+
+(defmethod deliver-command 'user/update
+  [courier [_ params] env]
+  (with-conn
+    (let [user (d/q '[:find (pull ?user [:db/id]) .
+                      :in $ ?name
+                      :where [?user :user/name ?name]]
+                    (d/db conn)
+                    (:user/name (:user params)))]
+      @(d/transact conn [(merge user (:user params))]))))
 
 ;;;; Tests
 
 (deftest user-model-and-commands
   (let [;; Define a simple user model
-        user-model {:name       :user
-                    :version    1
-                    :schema     {:username [:string :indexed]
-                                 :email    [:string :indexed]
-                                 :name     [:string]
-                                 :role     [:enum [:regular :admin]]
-                                 :friend   {[:ref :many] '...}}
-                    :validation {:user/username [v/required v/string]
-                                 :user/email    [v/required v/email]
-                                 :user/name     [v/string]}
-                    :sources
-                    [;; Fetch users from a Datomic db
-                     {:type      :store
-                      :store     :datomic
-                      :query     '[:find [(pull ?user ATTRS) ...]
-                                   :in $ ATTRS
-                                   :where [?user :user/name _]]}
-                     ;; Derive a :user/popular? attribute for every user
-                     ;; that is computed when running queries against the
-                     ;; model
-                     {:type      :derived-attr
-                      :attr      :popular?
-                      :store     :datomic
-                      :query     '[:find (count ?friend) .
-                                   :in $ ?user
-                                   :where [?user :user/friend ?friend]]
-                      :transform [[s/ALL] (fn [friends]
-                                            (and (not (nil? friends))
-                                                 (pos? friends)))]}]}
+        user-model {:name          :user
+                    :version       1
+                    :schema        {:username [:string :indexed]
+                                    :email    [:string :indexed]
+                                    :name     [:string]
+                                    :role     [:enum [:regular :admin]]
+                                    :friend   {[:ref :many] '...}}
+                    :validation    {:user/username [v/required v/string]
+                                    :user/email    [v/required v/email]
+                                    :user/name     [v/string]}
+                    :stores        [:datomic]
+                    :derived-attrs
+                    [{:name        :popular?
+                      :store       :datomic
+                      :query       '[:find (count ?friend) .
+                                     :in $ ?user
+                                     :where [?user :user/friend ?friend]]
+                      :transform   [[s/ALL] (fn [friends]
+                                              (and (not (nil? friends))
+                                                   (pos? friends)))]}]}
         modeler    (bm/modeler {:models          [user-model]
                                 :install-schemas install-schemas
-                                :schema->attrs   bd/schema->attrs
+                                :model->attrs    bd/model->attrs
                                 :validate        (fn [model rules data]
                                                    (-> data
                                                        (b/validate rules)
                                                        (first)))
                                 :entity-id       :db/id
-                                :query-source    query-source})
+                                :query-store     query-store})
         commands   {'user/create
                     {:version        1
                      :authorizations []
