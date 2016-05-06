@@ -58,7 +58,7 @@
             (->> (query-derived-attr env attr attr-q entity)
                  (merge-derived-attr model entity attr)))]
     (if (collection? result)
-      (mapv derive-attr result)
+      (into #{} (map derive-attr result))
       (derive-attr result))))
 
 (defn has-join-attr?
