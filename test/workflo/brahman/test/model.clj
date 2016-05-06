@@ -26,94 +26,62 @@
 
 ;;;; Simple properties / IModel interface functions
 
-(defspec models-satisfy-ibrahman
-  (prop/for-all [schema-names (gen/vector gen/symbol)]
+(defspec models-satisfy-imodel
+  (prop/for-all [model-names (gen/vector gen/symbol)]
     (let [specs   (mapv (fn [schema-name]
-                          {:schema {:name schema-name}})
-                        schema-names)
+                          {:name   schema-name
+                           :schema {}})
+                        model-names)
           modeler (bm/modeler {:models specs})
-          models  (mapv #(bm/get-model modeler %) schema-names)]
+          models  (mapv #(bm/get-model modeler %) model-names)]
       (and (is (every? #(not (nil? %)) models))
            (is (every? #(satisfies? bm/IModel %) models))
-           (is (= (into #{} schema-names)
+           (is (= (into #{} model-names)
                   (into #{} (map bm/model-name) models)))
            (is (= (into #{} (map :schema) specs)
                   (into #{} (map bm/schema) models)))))))
 
-(defspec models-have-the-same-name-as-their-schemas
-  (prop/for-all [schema-name gen/symbol]
-    (let [spec    {:schema {:name schema-name}}
-          modeler (bm/modeler {:models [spec]})
-          model   (bm/get-model modeler schema-name)]
-      (and (is (not (nil? model)))
-           (is (= schema-name (bm/model-name model)))))))
-
 (defspec models-remember-their-schema
-  (prop/for-all [schema-name gen/symbol]
-    (let [spec    {:schema {:name schema-name}}
+  (prop/for-all [model-name gen/symbol
+                 schema     (gen/map gen/keyword gen/keyword)]
+    (let [spec    {:name   model-name
+                   :schema schema}
           modeler (bm/modeler {:models [spec]})
-          model   (bm/get-model modeler schema-name)]
+          model   (bm/get-model modeler model-name)]
       (and (is (not (nil? model)))
-           (is (= (:schema spec) (bm/schema model)))))))
+           (is (= (:schema spec)
+                  (bm/schema model)))))))
 
 ;;;; Simple data models for regular collections
 
 (defspec vectors-can-be-used-as-dbs 10
   (prop/for-all [values (gen/vector gen/any)]
-    (let [item    {:schema {:name 'item}
-                   :sources [{:type :main}]}
+    (let [spec    {:name   'item
+                   :stores [:vector]}
           modeler (bm/modeler
-                    {:models [item]
-                     :store values
-                     :query (fn [{:keys [store]} _ _] store)})
+                    {:models [spec]
+                     :query-store (fn [{:keys [store]} _ _]
+                                    (case store :vector values))})
           items   (bm/get-model modeler 'item)]
-      (is (= values (bm/query items nil nil))))))
+      (is (= (into #{} values) (bm/query items nil))))))
 
 (defspec queries-can-be-used-to-select-keys 10
-  (prop/for-all [values (gen/vector (gen/map
-                                     gen/simple-type
-                                     gen/simple-type
-                                     {:num-elements 200})
+  (prop/for-all [values (gen/vector (gen/map gen/simple-type
+                                             gen/simple-type
+                                             {:num-elements 200})
                                     10)]
-    (let [item        {:schema {:name 'item}
-                       :sources [{:type :main}]}
+    (let [spec        {:name   'item
+                       :stores [:vector]}
           modeler     (bm/modeler
-                        {:models [item]
-                         :store values
-                         :query (fn [{:keys [store]} _ {:keys [inputs]}]
-                                  (let [keys (first inputs)]
-                                    (mapv #(select-keys % keys) store)))})
+                        {:models [spec]
+                         :query-store
+                         (fn [{:keys [store]} q _]
+                           (case store
+                             :vector (mapv #(select-keys % q) values)))})
           items       (bm/get-model modeler 'item)
           common-keys (reduce clojure.set/intersection
                               (into #{} (keys (first values)))
                               (map (comp (partial into #{}) keys)
                                    (rest values)))]
       (is (= (into #{} (map #(select-keys % common-keys)) values)
-             (into #{} (bm/query nil items (into [] common-keys))))))))
-
-(defspec extracting-validation-rules-works 10
-  (prop/for-all [attrs (gen/map
-                        gen/keyword
-                        (gen/vector gen/simple-type))]
-    (let [item        {:schema {:name 'item
-                                :attrs attrs}
-                       :sources [{:type :main}]}
-          ;; This validation extractor function assumes
-          ;; the validation rules for each attribute is
-          ;; the first keyword in each attribute spec.
-          ;; It returns a map with the structure
-          ;; {<attr1 name> <first key of attr1 spec>
-          ;;  <attr2 name> <first key of attr2 spec>}
-          extract-fn  (fn [attrs]
-                        (into {}
-                              (map (fn [[name spec]]
-                                     [name (first spec)]))
-                              attrs))
-          expected    (extract-fn attrs)
-          modeler     (bm/modeler
-                        {:models [item]
-                         :validation (fn [schema]
-                                       (extract-fn (:attrs schema)))})
-          items       (bm/get-model modeler 'item)]
-      (is (= (into #{} expected)
-             (into #{} (bm/validation items)))))))
+             (into #{} (bm/query items (into [] common-keys))))))))

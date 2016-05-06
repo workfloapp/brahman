@@ -30,7 +30,8 @@
                          from the raw schema (with joins etc.)")
   (get-modeler   [this] "Returns the modeler that manages the
                          models.")
-  (query         [this env q]
+  (query         [this q]
+                 [this env q]
                  [this env q extra]
                         "Queries the model based on its data
                          stores and derived attributes, given the
@@ -57,7 +58,7 @@
             (->> (query-derived-attr env attr attr-q entity)
                  (merge-derived-attr model entity attr)))]
     (if (collection? result)
-      (mapv derive-attr result)
+      (into #{} (map derive-attr result))
       (derive-attr result))))
 
 (defn has-join-attr?
@@ -111,9 +112,7 @@
 (defn query-store
   [{:keys [model->attrs query-store model store] :as env} q extra]
   (let [attrs (or q (model->attrs model))]
-    (query-store env
-                 (:query store)
-                 {:inputs [attrs] :extra extra})))
+    (query-store env q {:inputs [attrs] :extra extra})))
 
 (defn query-stores
   [model env q extra]
@@ -152,6 +151,9 @@
   (get-modeler [this]
     modeler)
 
+  (query [this q]
+    (query this {} q nil))
+
   (query [this env q]
     (query this env q nil))
 
@@ -166,7 +168,7 @@
 
 (defn model
   [{:keys [schema] :as props} config modeler]
-  {:pre [(map? schema)
+  {:pre [(or (nil? schema) (map? schema))
          (satisfies? IModeler modeler)]}
   (Model. props config modeler))
 
