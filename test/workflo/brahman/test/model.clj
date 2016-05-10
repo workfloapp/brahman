@@ -85,3 +85,43 @@
                                    (rest values)))]
       (is (= (into #{} (map #(select-keys % common-keys)) values)
              (into #{} (bm/query items (into [] common-keys))))))))
+
+
+(defspec queries-with-derived-attrs-work 10
+  (prop/for-all [collections (gen/vector-distinct-by :collection/id
+                              (gen/hash-map
+                               :collection/id     gen/nat
+                               :collection/values (gen/vector
+                                                   gen/nat)))]
+    (let [spec    {:name          'collection
+                   :stores        [:custom]
+                   :derived-attrs [{:name      :derived.sum
+                                    :prefixed? true
+                                    :store     :custom}
+                                   {:name      :derived/count
+                                    :prefixed? false
+                                    :store     :custom}]}
+          modeler (bm/modeler
+                   {:models [spec]
+                    :query-store (fn [_ q _]
+                                   (mapv #(select-keys % q)
+                                         collections))
+                    :query-derived-attr
+                    (fn [_ {:keys [name]} _ collection]
+                      (let [values (:collection/values collection)]
+                        (case name
+                          :derived.sum (reduce + values)
+                          :derived/count (count values))))})
+          model   (bm/get-model modeler 'collection)]
+      (is (= (into #{}
+                   (map (fn [{:keys [collection/values] :as collection}]
+                          (assoc collection
+                                 :collection/derived.sum
+                                 (reduce + values)
+                                 :derived/count
+                                 (count values))))
+                   collections)
+             (into #{} (bm/query model [:collection/id
+                                        :collection/values
+                                        :collection/derived.sum
+                                        :derived/count])))))))
