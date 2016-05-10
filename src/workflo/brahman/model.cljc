@@ -259,9 +259,8 @@
 
 (defn- default-merge-derived-attr
   [model entity attr value]
-  (let [schema    (schema model)
-        attr-name (if (:prefixed? attr)
-                    (keyword (name (:name schema))
+  (let [attr-name (if (:prefixed? attr)
+                    (keyword (name (model-name model))
                              (name (:name attr)))
                     (keyword (namespace (:name attr))
                              (name (:name attr))))]
