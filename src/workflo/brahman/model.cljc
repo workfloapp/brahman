@@ -31,8 +31,7 @@
   (get-modeler   [this] "Returns the modeler that manages the
                          models.")
   (query         [this q]
-                 [this env q]
-                 [this env q extra]
+                 [this q env]
                         "Queries the model based on its data
                          stores and derived attributes, given the
                          query q and extra information (e.g. query
@@ -76,10 +75,11 @@
         joins  ((:model->joins config) model)]
     (reduce (fn [query-result [attr-name attr :as join]]
               (letfn [(follow-join [entity-or-entities]
-                        (query-derived-attrs (:model attr) env
-                                             (extract-attr-query q
-                                                                 attr-name)
-                                             entity-or-entities))]
+                        (let [attr-query (extract-attr-query
+                                          q attr-name)]
+                          (query-derived-attrs (:model attr) env
+                                               attr-query
+                                               entity-or-entities)))]
                 (if (has-join-attr? query-result attr-name)
                   (if (collection? query-result)
                     (mapv #(update % attr-name follow-join) query-result)
@@ -110,18 +110,19 @@
     result))
 
 (defn query-store
-  [{:keys [model->attrs query-store model store] :as env} q extra]
+  [{:keys [model->attrs query-store model] :as env} q]
   (let [attrs (or q (model->attrs model))]
-    (query-store env q {:inputs [attrs] :extra extra})))
+    (query-store env q [attrs])))
 
 (defn query-stores
-  [model env q extra]
+  [model env q]
   (let [config      (:config model)
         merge-store (:merge-store config)]
     (reduce (fn [ret store]
-              (let [env'   (merge env config {:model model
-                                              :store store})
-                    result (query-store env' q extra)]
+              (let [env'   (assoc (merge env config)
+                                  :model model
+                                  :store store)
+                    result (query-store env' q)]
                 (merge-store store ret result)))
             nil
             (stores model))))
@@ -152,15 +153,11 @@
     modeler)
 
   (query [this q]
-    (query this {} q nil))
+    (query this q {}))
 
-  (query [this env q]
-    (query this env q nil))
-
-  (query [this env q extra]
-    (let [store-results    (query-stores this env q extra)
-          combined-results (query-derived-attrs this env q store-results)]
-      combined-results))
+  (query [this q env]
+    (->> (query-stores this env q)
+         (query-derived-attrs this env q)))
 
   (validate [this data]
     (let [config (:config this)]
