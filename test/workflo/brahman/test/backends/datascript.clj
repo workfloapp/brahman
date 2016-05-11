@@ -8,16 +8,22 @@
             [workflo.brahman.model :as bm]))
 
 (def ^:const +models+
-  {:user {:name   :user
-          :schema {:name   [:string :indexed]
-                   :email  [:string :indexed]
-                   :friend {[:ref :many] '...}
-                   :post   {[:ref :many] :post}}
-          :stores [:datascript]}
-   :post {:name   :post
-          :schema {:author {[:ref :one] :user}
-                   :title  [:string :indexed]}
-          :stores [:datascript]}})
+  {:user {:name          :user
+          :schema        {:name   [:string :indexed]
+                          :email  [:string :indexed]
+                          :friend {[:ref :many] '...}
+                          :post   {[:ref :many] :post}}
+          :stores        [:datascript]
+          :derived-attrs [{:name  :friend-count
+                           :store :datascript
+                           :query '[:find (count ?f) .
+                                    :in $ ?eattr ?eval
+                                    :where [?u ?eattr ?eval]
+                                           [?u :user/friend ?f]]}]}
+   :post {:name          :post
+          :schema        {:author {[:ref :one] :user}
+                          :title  [:string :indexed]}
+          :stores        [:datascript]}})
 
 (deftest fetch-one-query-for-a-model-is-correct
   (let [modeler (bm/modeler {:models (vals +models+)
@@ -99,31 +105,42 @@
                   [{:db/id       -1
                     :user/name   "Jeff"
                     :user/email  "jeff@jeff.org"
-                    :user/friend -2
-                    :user/post   -3}
+                    :user/friend [-2 -3]
+                    :user/post   -4}
                    {:db/id       -2
                     :user/name   "Linda"
                     :user/email  "linda@linda.org"
                     :user/friend -1
-                    :user/post   -4}
+                    :user/post   -5}
                    {:db/id       -3
+                    :user/name   "Joe"
+                    :user/email  "joe@joe.org"}
+                   {:db/id       -4
                     :post/title  "Jeff's post"
                     :post/author -1}
-                   {:db/id       -4
+                   {:db/id       -5
                     :post/title  "Linda's post"
                     :post/author -2}])
-    (and (is (= {:user/name "Jeff" :user/email "jeff@jeff.org"}
-                (bm/query users [:user/name :user/email]
-                          {:fetch-one? true}
+    (and (is (= {:user/name         "Jeff"
+                 :user/email        "jeff@jeff.org"
+                 :user/friend-count 2}
+                (bm/query users [:user/name
+                                 :user/email
+                                 :user/friend-count]
+                          {:fetch-one?  true
+                           :entity-attr :user/name}
                           '[[?e :user/name "Jeff"]])))
-         (is (= {:user/email "linda@linda.org"
-                 :user/post [{:post/title "Linda's post"}]
-                 :user/friend [{:user/name "Jeff"}]}
+         (is (= {:user/email        "linda@linda.org"
+                 :user/post         [{:post/title "Linda's post"}]
+                 :user/friend       [{:user/name "Jeff"}]
+                 :user/friend-count nil}
                 (bm/query users
                           [:user/email
+                           :user/friend-count
                            {:user/post [:post/title]}
                            {:user/friend [:user/name]}]
-                          {:fetch-one? true}
+                          {:fetch-one?  true
+                           :entity-attr :user/name}
                           '[[?e :user/name "Linda"]]))))))
 
 (deftest fetching-many-entities-from-datascript-works
