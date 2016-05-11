@@ -26,12 +26,15 @@
   (validation    [this] "Validation rules defined for the model")
   (stores        [this] "The data stores used in this model")
   (derived-attrs [this] "The derived attributes used in this model")
-  (attrs         [this] "Attributes for use in queries, computed
+  (attrs         [this]
+                 [this recursive?]
+                        "Attributes for use in queries, computed
                          from the raw schema (with joins etc.)")
   (get-modeler   [this] "Returns the modeler that manages the
                          models.")
   (query         [this q]
                  [this q env]
+                 [this q env params]
                         "Queries the model based on its data
                          stores and derived attributes, given the
                          query q and extra information (e.g. query
@@ -112,20 +115,22 @@
     result))
 
 (defn query-store
-  [{:keys [model->attrs query-store model] :as env} q]
-  (let [attrs (or q (model->attrs model))]
-    (query-store env q [attrs])))
+  [{:keys [model->attrs query-store model] :as env} q params]
+  (let [attrs (or q (model->attrs model false))]
+    (query-store env attrs params)))
 
 (defn query-stores
-  [model env q]
+  [model env q params]
   (let [config      (:config model)
         merge-store (:merge-store config)]
     (reduce (fn [ret store]
               (let [env'   (assoc (merge env config)
                                   :model model
                                   :store store)
-                    result (query-store env' q)]
-                (merge-store store ret result)))
+                    result (query-store env' q params)]
+                (if (:fetch-one? env)
+                  (merge ret result)
+                  (merge-store store ret result))))
             nil
             (stores model))))
 
@@ -149,7 +154,10 @@
     (:derived-attrs props))
 
   (attrs [this]
-    ((:model->attrs config) this))
+    (attrs this true))
+
+  (attrs [this recursive?]
+    ((:model->attrs config) this recursive?))
 
   (get-modeler [this]
     modeler)
@@ -158,7 +166,10 @@
     (query this q {}))
 
   (query [this q env]
-    (->> (query-stores this env q)
+    (query this q env []))
+
+  (query [this q env params]
+    (->> (query-stores this env q params)
          (query-derived-attrs this env q)))
 
   (validate [this data]
@@ -227,19 +238,24 @@
                     (update res store #(into {} (merge % m)))))]
           (reduce collect-step {} stores))))))
 
-(defn- default-store-schema [schema]
+(defn- default-store-schema
+  [schema]
   schema)
 
-(defn- default-validation [model]
+(defn- default-validation
+  [model]
   nil)
 
-(defn- default-model->attrs [model]
+(defn- default-model->attrs
+  [model recursive?]
   [])
 
-(defn- default-model->joins [model]
+(defn- default-model->joins
+  [model]
   {})
 
-(defn- default-validate [model data]
+(defn- default-validate
+  [model data]
   true)
 
 (defn- default-query-store
