@@ -85,7 +85,9 @@
                                                entity-or-entities)))]
                 (if (has-join-attr? query-result attr-name)
                   (if (collection? query-result)
-                    (mapv #(update % attr-name follow-join) query-result)
+                    (into #{}
+                          (map #(update % attr-name follow-join))
+                          query-result)
                     (update query-result attr-name follow-join))
                   query-result)))
             query-result
