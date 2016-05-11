@@ -152,8 +152,9 @@
          :where [~'?e ~model-attr]
                 ~@clauses]
        ;; Query a collection of entities
-       `[:find [(~'pull ~'?e ~query)]
-         :where [~'?e ~model-attr]]))))
+       `[:find [(~'pull ~'?e ~query) ~'...]
+         :where [~'?e ~model-attr]
+                ~@clauses]))))
 
 (defn query-store
   "Execute an Om Next query against DataScript."
