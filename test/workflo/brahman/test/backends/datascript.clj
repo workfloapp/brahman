@@ -50,7 +50,7 @@
                              :model->attrs bds/model->attrs
                              :model->joins bds/model->joins})
         model   (bm/get-model modeler :user)]
-    (is (= '[:find [(pull ?e [:user/name :user/email])]
+    (is (= '[:find [(pull ?e [:user/name :user/email]) ...]
              :where [?e :user/name]]
            (bds/datascript-query {:model      model
                                   :fetch-one? false}
@@ -61,7 +61,7 @@
                              :model->attrs bds/model->attrs
                              :model->joins bds/model->joins})
         model   (bm/get-model modeler :post)]
-    (is (= '[:find [(pull ?e [:post/title])]
+    (is (= '[:find [(pull ?e [:post/title]) ...]
              :where [?e :post/title]]
            (bds/datascript-query {:model      model
                                   :fetch-one? false}
@@ -94,8 +94,7 @@
                   :install-schemas    (partial install-schemas conn)
                   :query-derived-attr (partial query-derived-attr conn)
                   :query-store        (partial query-store conn)})
-        users   (bm/get-model modeler :user)
-        posts   (bm/get-model modeler :posts)]
+        users   (bm/get-model modeler :user)]
     (add-entities @conn
                   [{:db/id       -1
                     :user/name   "Jeff"
@@ -118,7 +117,51 @@
                           {:fetch-one? true}
                           '[[?e :user/name "Jeff"]])))
          (is (= {:user/email "linda@linda.org"
-                 :user/post [{:post/title "Linda's post"}]}
-                (bm/query users [:user/email {:user/post [:post/title]}]
+                 :user/post [{:post/title "Linda's post"}]
+                 :user/friend [{:user/name "Jeff"}]}
+                (bm/query users
+                          [:user/email
+                           {:user/post [:post/title]}
+                           {:user/friend [:user/name]}]
                           {:fetch-one? true}
                           '[[?e :user/name "Linda"]]))))))
+
+(deftest fetching-many-entities-from-datascript-works
+  (let [conn    (atom nil)
+        modeler (bm/modeler
+                 {:models             (vals +models+)
+                  :model->attrs       bds/model->attrs
+                  :model->joins       bds/model->joins
+                  :install-schemas    (partial install-schemas conn)
+                  :query-derived-attr (partial query-derived-attr conn)
+                  :query-store        (partial query-store conn)})
+        users   (bm/get-model modeler :user)
+        posts   (bm/get-model modeler :post)]
+    (add-entities @conn
+                  [{:db/id       -1
+                    :user/name   "Jeff"
+                    :user/email  "jeff@jeff.org"
+                    :user/friend -2
+                    :user/post   -3}
+                   {:db/id       -2
+                    :user/name   "Linda"
+                    :user/email  "linda@linda.org"
+                    :user/friend -1
+                    :user/post   -4}
+                   {:db/id       -3
+                    :post/title  "Jeff's post"
+                    :post/author -1}
+                   {:db/id       -4
+                    :post/title  "Linda's post"
+                    :post/author -2}])
+    (and (is (= #{{:user/name "Jeff" :user/email "jeff@jeff.org"}
+                  {:user/name "Linda" :user/email "linda@linda.org"}}
+                (bm/query users [:user/name :user/email])))
+         (is (= #{{:post/title "Jeff's post"
+                   :post/author {:user/name "Jeff"}}}
+                (bm/query posts
+                          [:post/title
+                           {:post/author [:user/name]}]
+                          {}
+                          '[[?e :post/author ?u]
+                            [?u :user/name "Jeff"]]))))))
