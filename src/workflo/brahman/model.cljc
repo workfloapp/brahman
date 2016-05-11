@@ -11,13 +11,6 @@
     (cond-> res
       (not (coll? raw-data)) first)))
 
-;;;; Utilities
-
-(defn collection?
-  [query-result]
-  (and (coll? query-result)
-       (not (map? query-result))))
-
 ;;;; Model protocol
 
 (defprotocol IModel
@@ -50,6 +43,22 @@
                           {<store1 name> {<model1 name> <schema>
                                           <model2 name> <schema>}
                            ...}"))
+
+;;;; Utilities
+
+(defn collection?
+  [query-result]
+  (and (coll? query-result)
+       (not (map? query-result))))
+
+(defn derived-attr-name
+  [model attr]
+  (if (or (:prefixed? attr)
+          (not (some #{:prefixed?} (keys attr))))
+    (keyword (name (model-name model))
+             (name (:name attr)))
+    (keyword (namespace (:name attr))
+             (name (:name attr)))))
 
 ;;;; Query execution
 
@@ -95,20 +104,20 @@
 
 (defn extract-attr-query
   [q attr-name]
-  (let [ast   (om-parser/query->ast q)
-        prop  (first (filter #(= attr-name (:key %)) (:children ast)))
-        query (:query prop)]
-    query))
+  (let [ast (om-parser/query->ast q)]
+    (first (filter #(= attr-name (:key %)) (:children ast)))))
 
 (defn query-derived-attrs
   [model env q query-result]
   (let [config (:config model)
         result (reduce (fn [query-result {:keys [name] :as attr}]
                          (let [env'   (merge env config {:model model})
-                               attr-q (extract-attr-query q name)]
-                           (query-derived-attr env'
-                                               attr attr-q
-                                               query-result)))
+                               attr-n (derived-attr-name model attr)
+                               attr-q (extract-attr-query q attr-n)]
+                           (cond->> query-result
+                             (not (nil? attr-q))
+                             (query-derived-attr env' attr
+                                                 (:query attr-q)))))
                        query-result
                        (derived-attrs model))
         result (query-derived-attrs-follow-joins model env q result)]
@@ -277,11 +286,7 @@
 
 (defn- default-merge-derived-attr
   [model entity attr value]
-  (let [attr-name (if (:prefixed? attr)
-                    (keyword (name (model-name model))
-                             (name (:name attr)))
-                    (keyword (namespace (:name attr))
-                             (name (:name attr))))]
+  (let [attr-name (derived-attr-name model attr)]
     (assoc entity attr-name value)))
 
 (defn modeler
