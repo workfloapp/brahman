@@ -12,6 +12,7 @@
                  [org.clojure/core.async "0.2.374"]
 
                  ;; Datomic
+                 [datascript "0.15.0"]
                  [com.datomic/datomic-free "0.9.5344"]
                  [datomic-schema "1.3.0"]
 
