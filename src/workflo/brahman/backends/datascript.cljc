@@ -1,5 +1,6 @@
 (ns workflo.brahman.backends.datascript
   (:require [datascript.core :as d]
+            [om.next.impl.parser :as om-parser]
             [workflo.brahman.model :as bm]))
 
 ;;;; Schema attribute extraction
@@ -160,9 +161,31 @@
          :where [~'?e ~model-attr]
                 ~@clauses]))))
 
+(defn remove-links-from-ast
+  [ast]
+  (letfn [(ast-link? [{:keys [key]}]
+            (and (vector? key)
+                 (= 2 (count key))
+                 (or (number? (second key))
+                     (= '_ (second key)))))]
+    (cond-> ast
+      (some #{(:type ast)} [:root :join])
+      (update :children
+              (fn [children]
+                (into []
+                      (comp (remove ast-link?)
+                            (map remove-links-from-ast))
+                      children))))))
+
+(defn remove-links
+  [query]
+  (->> (om-parser/query->ast query)
+       (remove-links-from-ast)
+       (om-parser/ast->expr)))
+
 (defn query-store
   "Execute an Om Next query against DataScript."
   [conn env query clauses]
-  (let [ds-query  (datascript-query env query clauses)
+  (let [ds-query  (datascript-query env (remove-links query) clauses)
         ds-result (d/q ds-query @conn)]
     ds-result))
