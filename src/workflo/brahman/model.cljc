@@ -275,6 +275,10 @@
   [env attr query entity]
   nil)
 
+(defn- default-query-link
+  [env link query]
+  nil)
+
 (defn- default-transform [tspec raw-value]
   (tspec raw-value))
 
@@ -299,6 +303,7 @@
            entity-id
            query-store
            query-derived-attr
+           query-link
            merge-store
            merge-derived-attr
            transform]
@@ -311,6 +316,7 @@
          entity-id          identity
          query-store        default-query-store
          query-derived-attr default-query-derived-attr
+         query-link         default-query-link
          merge-store        default-merge-store
          merge-derived-attr default-merge-derived-attr
          transform          default-transform}
@@ -323,6 +329,7 @@
                        :model->joins       model->joins
                        :query-store        query-store
                        :query-derived-attr query-derived-attr
+                       :query-link         query-link
                        :merge-store        merge-store
                        :merge-derived-attr merge-derived-attr
                        :transform          transform}
