@@ -11,13 +11,6 @@
     (cond-> res
       (not (coll? raw-data)) first)))
 
-;;;; Utilities
-
-(defn collection?
-  [query-result]
-  (and (coll? query-result)
-       (not (map? query-result))))
-
 ;;;; Model protocol
 
 (defprotocol IModel
@@ -26,13 +19,15 @@
   (validation    [this] "Validation rules defined for the model")
   (stores        [this] "The data stores used in this model")
   (derived-attrs [this] "The derived attributes used in this model")
-  (attrs         [this] "Attributes for use in queries, computed
+  (attrs         [this]
+                 [this recursive?]
+                        "Attributes for use in queries, computed
                          from the raw schema (with joins etc.)")
   (get-modeler   [this] "Returns the modeler that manages the
                          models.")
   (query         [this q]
-                 [this env q]
-                 [this env q extra]
+                 [this q env]
+                 [this q env params]
                         "Queries the model based on its data
                          stores and derived attributes, given the
                          query q and extra information (e.g. query
@@ -48,6 +43,22 @@
                           {<store1 name> {<model1 name> <schema>
                                           <model2 name> <schema>}
                            ...}"))
+
+;;;; Utilities
+
+(defn collection?
+  [query-result]
+  (and (coll? query-result)
+       (not (map? query-result))))
+
+(defn derived-attr-name
+  [model attr]
+  (if (or (:prefixed? attr)
+          (not (some #{:prefixed?} (keys attr))))
+    (keyword (name (model-name model))
+             (name (:name attr)))
+    (keyword (namespace (:name attr))
+             (name (:name attr)))))
 
 ;;;; Query execution
 
@@ -76,13 +87,16 @@
         joins  ((:model->joins config) model)]
     (reduce (fn [query-result [attr-name attr :as join]]
               (letfn [(follow-join [entity-or-entities]
-                        (query-derived-attrs (:model attr) env
-                                             (extract-attr-query q
-                                                                 attr-name)
-                                             entity-or-entities))]
+                        (let [attr-query (extract-attr-query
+                                          q attr-name)]
+                          (query-derived-attrs (:model attr) env
+                                               attr-query
+                                               entity-or-entities)))]
                 (if (has-join-attr? query-result attr-name)
                   (if (collection? query-result)
-                    (mapv #(update % attr-name follow-join) query-result)
+                    (into #{}
+                          (map #(update % attr-name follow-join))
+                          query-result)
                     (update query-result attr-name follow-join))
                   query-result)))
             query-result
@@ -90,39 +104,42 @@
 
 (defn extract-attr-query
   [q attr-name]
-  (let [ast   (om-parser/query->ast q)
-        prop  (first (filter #(= attr-name (:key %)) (:children ast)))
-        query (:query prop)]
-    query))
+  (let [ast (om-parser/query->ast q)]
+    (first (filter #(= attr-name (:key %)) (:children ast)))))
 
 (defn query-derived-attrs
   [model env q query-result]
   (let [config (:config model)
         result (reduce (fn [query-result {:keys [name] :as attr}]
                          (let [env'   (merge env config {:model model})
-                               attr-q (extract-attr-query q name)]
-                           (query-derived-attr env'
-                                               attr attr-q
-                                               query-result)))
+                               attr-n (derived-attr-name model attr)
+                               attr-q (extract-attr-query q attr-n)]
+                           (cond->> query-result
+                             (not (nil? attr-q))
+                             (query-derived-attr env' attr
+                                                 (:query attr-q)))))
                        query-result
                        (derived-attrs model))
         result (query-derived-attrs-follow-joins model env q result)]
     result))
 
 (defn query-store
-  [{:keys [model->attrs query-store model store] :as env} q extra]
-  (let [attrs (or q (model->attrs model))]
-    (query-store env q {:inputs [attrs] :extra extra})))
+  [{:keys [model->attrs query-store model] :as env} q params]
+  (let [attrs (or q (model->attrs model false))]
+    (query-store env attrs params)))
 
 (defn query-stores
-  [model env q extra]
+  [model env q params]
   (let [config      (:config model)
         merge-store (:merge-store config)]
     (reduce (fn [ret store]
-              (let [env'   (merge env config {:model model
-                                              :store store})
-                    result (query-store env' q extra)]
-                (merge-store store ret result)))
+              (let [env'   (assoc (merge env config)
+                                  :model model
+                                  :store store)
+                    result (query-store env' q params)]
+                (if (:fetch-one? env)
+                  (merge ret result)
+                  (merge-store store ret result))))
             nil
             (stores model))))
 
@@ -146,21 +163,23 @@
     (:derived-attrs props))
 
   (attrs [this]
-    ((:model->attrs config) this))
+    (attrs this true))
+
+  (attrs [this recursive?]
+    ((:model->attrs config) this recursive?))
 
   (get-modeler [this]
     modeler)
 
   (query [this q]
-    (query this {} q nil))
+    (query this q {}))
 
-  (query [this env q]
-    (query this env q nil))
+  (query [this q env]
+    (query this q env []))
 
-  (query [this env q extra]
-    (let [store-results    (query-stores this env q extra)
-          combined-results (query-derived-attrs this env q store-results)]
-      combined-results))
+  (query [this q env params]
+    (->> (query-stores this env q params)
+         (query-derived-attrs this env q)))
 
   (validate [this data]
     (let [config (:config this)]
@@ -228,19 +247,24 @@
                     (update res store #(into {} (merge % m)))))]
           (reduce collect-step {} stores))))))
 
-(defn- default-store-schema [schema]
+(defn- default-store-schema
+  [schema]
   schema)
 
-(defn- default-validation [model]
+(defn- default-validation
+  [model]
   nil)
 
-(defn- default-model->attrs [model]
+(defn- default-model->attrs
+  [model recursive?]
   [])
 
-(defn- default-model->joins [model]
+(defn- default-model->joins
+  [model]
   {})
 
-(defn- default-validate [model data]
+(defn- default-validate
+  [model data]
   true)
 
 (defn- default-query-store
@@ -262,12 +286,7 @@
 
 (defn- default-merge-derived-attr
   [model entity attr value]
-  (let [schema    (schema model)
-        attr-name (if (:prefixed? attr)
-                    (keyword (name (:name schema))
-                             (name (:name attr)))
-                    (keyword (namespace (:name attr))
-                             (name (:name attr))))]
+  (let [attr-name (derived-attr-name model attr)]
     (assoc entity attr-name value)))
 
 (defn modeler
