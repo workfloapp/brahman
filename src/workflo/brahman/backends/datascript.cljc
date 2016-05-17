@@ -1,5 +1,6 @@
 (ns workflo.brahman.backends.datascript
   (:require [datascript.core :as d]
+            [om.next.impl.parser :as om-parser]
             [workflo.brahman.model :as bm]))
 
 ;;;; Schema attribute extraction
@@ -160,9 +161,90 @@
          :where [~'?e ~model-attr]
                 ~@clauses]))))
 
+(defn extract-links
+  "Takes an Om Next query and extracts all links from it, returning
+   the Om Next query without links and a mapping of query paths to
+   links (as Om Next AST fragments) in the following form:
+
+       {:query <original Om Next query without links>
+        :links {[] [<link 1> <link 2>]
+                [:foo :bar] [<link 3> <link 4>]}}."
+  [query]
+  (letfn [(ast-link? [{:keys [key]}]
+            (and (vector? key)
+                 (= 2 (count key))
+                 (or (number? (second key))
+                     (string? (second key))
+                     (keyword? (second key))
+                     (= '_ (second key)))))
+          (extract-links* [ast path links]
+            (cond-> ast
+              (:children ast)
+              (update :children
+                      (fn [children]
+                        (let [child-links (filter ast-link? children)]
+                          (when-not (empty? child-links)
+                            (swap! links update path
+                                   (comp set concat)
+                                   child-links)))
+                        (into []
+                              (comp (remove ast-link?)
+                                    (map (fn [{:keys [key] :as child}]
+                                           (extract-links* child
+                                                           (conj path
+                                                                 key)
+                                                           links))))
+                              children)))))]
+    (let [ast               (om-parser/query->ast query)
+          links             (atom {})
+          ast-without-links (extract-links* ast [] links)]
+      {:query (om-parser/ast->expr ast-without-links)
+       :links @links})))
+
+(defn query-links
+  "Queries all links individually and returns a mapping of query
+   paths to link results, each of which is represented as a map
+   storing the original link in :link and its query result in
+   :result."
+  [conn env links]
+  (letfn [(query-link [{:keys [key query] :as link}]
+            {:link   link
+             :result ((:query-link env) env key query)})]
+    (into {}
+          (map (fn [[path links]]
+                 [path (mapv query-link links)]))
+          links)))
+
+(defn merge-link-results
+  "Merges the results from link queries into a a DataScript query
+   result."
+  [query-result link-results]
+  (letfn [(merge-link-results-at-path [entity-or-entities [path results]]
+            (if (bm/collection? entity-or-entities)
+              (into #{}
+                    (map #(merge-link-results-at-path
+                           % [path results]))
+                    entity-or-entities)
+              (if (empty? path)
+                (reduce (fn [entity {:keys [link result]}]
+                          (assoc entity (:dispatch-key link) result))
+                        entity-or-entities
+                        results)
+                (update entity-or-entities
+                        (first path)
+                        merge-link-results-at-path
+                        [(rest path) results]))))]
+    (reduce merge-link-results-at-path
+            query-result
+            link-results)))
+
 (defn query-store
-  "Execute an Om Next query against DataScript."
+  "Executes an Om Next query against DataScript."
   [conn env query clauses]
-  (let [ds-query  (datascript-query env query clauses)
-        ds-result (d/q ds-query @conn)]
-    ds-result))
+  (let [{:keys [query links]} (extract-links query)
+        ds-query              (datascript-query env query clauses)
+        ds-result             (d/q ds-query @conn)
+        link-results          (query-links conn env links)
+        result                (merge-link-results ds-result
+                                                  link-results)]
+    result))

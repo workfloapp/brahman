@@ -83,6 +83,13 @@
   [conn env attr query entity]
   (bds/query-derived-attr @conn env attr query entity))
 
+(defn query-link
+  [conn env [link-name id] query]
+  (case link-name
+    :link-one (cond-> {:foo "Foo" :bar "Bar"}
+                query (select-keys query))
+    :link-two (* id 10)))
+
 (defn query-store
   [conn env query params]
   (bds/query-store @conn env query params))
@@ -182,3 +189,51 @@
                           {}
                           '[[?e :post/author ?u]
                             [?u :user/name "Jeff"]]))))))
+
+(deftest queries-with-links-work
+  (let [conn    (atom nil)
+        modeler (bm/modeler
+                 {:models             (vals +models+)
+                  :model->attrs       bds/model->attrs
+                  :model->joins       bds/model->joins
+                  ;; :model->links       bds/model->links
+                  :install-schemas    (partial install-schemas conn)
+                  :query-derived-attr (partial query-derived-attr conn)
+                  :query-link         (partial query-link conn)
+                  :query-store        (partial query-store conn)})
+        users   (bm/get-model modeler :user)]
+    (add-entities @conn
+                  [{:db/id       -1
+                    :user/name   "Jeff"
+                    :user/email  "jeff@jeff.org"
+                    :user/friend -2
+                    :user/post   -3}
+                   {:db/id       -2
+                    :user/name   "Linda"
+                    :user/email  "linda@linda.org"
+                    :user/friend -1
+                    :user/post   -4}
+                   {:db/id       -3
+                    :post/title  "Jeff's post"
+                    :post/author -1}
+                   {:db/id       -4
+                    :post/title  "Linda's post"
+                    :post/author -2}])
+    (and (is (= {:user/name   "Jeff"
+                 :link-one {:foo "Foo" :bar "Bar"}}
+                (bm/query users
+                          [:user/name [:link-one '_]]
+                          {:fetch-one? true}
+                          '[[?e :user/name "Jeff"]])))
+         (is (= #{{:user/name "Jeff"
+                   :link-one {:foo "Foo"}}
+                  {:user/name "Linda"
+                   :link-one {:foo "Foo"}}}
+                (bm/query users
+                          [:user/name {[:link-one '_] [:foo]}])))
+         (is (= {:user/name   "Jeff"
+                 :link-two 100}
+                (bm/query users
+                          [:user/name [:link-two 10]]
+                          {:fetch-one? true}
+                          '[[?e :user/name "Jeff"]]))))))
