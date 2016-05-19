@@ -17,8 +17,8 @@
           :derived-attrs [{:name  :friend-count
                            :store :datascript
                            :query '[:find (count ?f) .
-                                    :in $ ?eattr ?eval
-                                    :where [?u ?eattr ?eval]
+                                    :in $ ?n
+                                    :where [?u :user/name ?n]
                                            [?u :user/friend ?f]]}]}
    :post {:name          :post
           :schema        {:author {[:ref :one] :user}
@@ -104,6 +104,7 @@
                  {:models             (vals +models+)
                   :model->attrs       bds/model->attrs
                   :model->joins       bds/model->joins
+                  :entity-id          :user/name
                   :install-schemas    (partial install-schemas conn)
                   :query-derived-attr (partial query-derived-attr conn)
                   :query-store        (partial query-store conn)})
@@ -134,8 +135,7 @@
                 (bm/query users [:user/name
                                  :user/email
                                  :user/friend-count]
-                          {:fetch-one?  true
-                           :entity-attr :user/name}
+                          {:fetch-one? true}
                           '[[?e :user/name "Jeff"]])))
          (is (= {:user/email        "linda@linda.org"
                  :user/post         [{:post/title "Linda's post"}]
@@ -146,8 +146,7 @@
                            :user/friend-count
                            {:user/post [:post/title]}
                            {:user/friend [:user/name]}]
-                          {:fetch-one?  true
-                           :entity-attr :user/name}
+                          {:fetch-one? true}
                           '[[?e :user/name "Linda"]]))))))
 
 (deftest fetching-many-entities-from-datascript-works
@@ -156,6 +155,7 @@
                  {:models             (vals +models+)
                   :model->attrs       bds/model->attrs
                   :model->joins       bds/model->joins
+                  :entity-id          :user/name
                   :install-schemas    (partial install-schemas conn)
                   :query-derived-attr (partial query-derived-attr conn)
                   :query-store        (partial query-store conn)})
@@ -196,6 +196,7 @@
                  {:models             (vals +models+)
                   :model->attrs       bds/model->attrs
                   :model->joins       bds/model->joins
+                  :entity-id          :user/name
                   ;; :model->links       bds/model->links
                   :install-schemas    (partial install-schemas conn)
                   :query-derived-attr (partial query-derived-attr conn)

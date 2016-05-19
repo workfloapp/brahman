@@ -313,7 +313,7 @@
          model->attrs       default-model->attrs
          model->joins       default-model->joins
          validate           default-validate
-         entity-id          identity
+         entity-id          :db/id
          query-store        default-query-store
          query-derived-attr default-query-derived-attr
          query-link         default-query-link
