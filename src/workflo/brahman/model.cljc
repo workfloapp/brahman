@@ -82,13 +82,13 @@
 (declare extract-attr-query)
 
 (defn query-derived-attrs-follow-joins
-  [model env q query-result]
+  [model env ast query-result]
   (let [config (:config model)
         joins  ((:model->joins config) model)]
     (reduce (fn [query-result [attr-name attr :as join]]
               (letfn [(follow-join [entity-or-entities]
                         (let [attr-query (extract-attr-query
-                                          q attr-name)]
+                                          ast attr-name)]
                           (query-derived-attrs (:model attr) env
                                                attr-query
                                                entity-or-entities)))]
@@ -103,24 +103,23 @@
             joins)))
 
 (defn extract-attr-query
-  [q attr-name]
-  (let [ast (om-parser/query->ast q)]
-    (first (filter #(= attr-name (:key %)) (:children ast)))))
+  [ast attr-name]
+  (first (filter #(= attr-name (:key %)) (:children ast))))
 
 (defn query-derived-attrs
-  [model env q query-result]
+  [model env ast query-result]
   (let [config (:config model)
         result (reduce (fn [query-result {:keys [name] :as attr}]
                          (let [env'   (merge env config {:model model})
                                attr-n (derived-attr-name model attr)
-                               attr-q (extract-attr-query q attr-n)]
+                               attr-q (extract-attr-query ast attr-n)]
                            (cond->> query-result
                              (not (nil? attr-q))
                              (query-derived-attr env' attr
                                                  (:query attr-q)))))
                        query-result
                        (derived-attrs model))
-        result (query-derived-attrs-follow-joins model env q result)]
+        result (query-derived-attrs-follow-joins model env ast result)]
     result))
 
 (defn query-store
@@ -178,8 +177,9 @@
     (query this q env []))
 
   (query [this q env params]
-    (->> (query-stores this env q params)
-         (query-derived-attrs this env q)))
+    (let [ast (om-parser/query->ast q)]
+      (->> (query-stores this env q params)
+           (query-derived-attrs this env ast))))
 
   (validate [this data]
     (let [config (:config this)]
