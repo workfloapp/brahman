@@ -66,7 +66,7 @@
       (is (= (into #{} values) (bm/query items nil))))))
 
 (defspec queries-can-be-used-to-select-keys 10
-  (prop/for-all [values (gen/vector (gen/map gen/simple-type
+  (prop/for-all [values (gen/vector (gen/map gen/keyword
                                              gen/simple-type
                                              {:num-elements 200})
                                     10)]
