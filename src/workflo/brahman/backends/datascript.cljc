@@ -128,11 +128,8 @@
 
 (defn query-derived-attr
   [conn env attr query entity]
-  (let [entity-attr (or (:entity-attr env) :db/id)]
-    (d/q (:query attr)
-         @conn
-         entity-attr (entity entity-attr)
-         query)))
+  (let [entity-id (or (:entity-id env) :db/id)]
+    (d/q (:query attr) @conn (entity-id entity) query)))
 
 (defn- identifying-model-attr
   [model]
