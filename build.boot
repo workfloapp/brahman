@@ -29,7 +29,7 @@
          '[boot.git :refer [last-commit]])
 
 (def +project+ 'workflo/brahman)
-(def +version+ "0.4.0-SNAPSHOT")
+(def +version+ "0.4.1-SNAPSHOT")
 
 (bootlaces! +version+ :dont-modify-paths? true)
 
