@@ -264,8 +264,8 @@
   {})
 
 (defn- default-validate
-  [model data]
-  true)
+  [model validation data]
+  nil)
 
 (defn- default-query-store
   [env query {:keys [inputs extra]}]
