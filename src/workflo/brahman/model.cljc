@@ -1,6 +1,6 @@
 (ns workflo.brahman.model
-  (:require #?(:cljs [com.rpl.specter.macros :refer-macros [transform]]
-               :clj  [com.rpl.specter.macros :refer [transform]])
+  #?(:cljs (:require-macros [com.rpl.specter.macros :refer [transform]]))
+  (:require #?(:clj [com.rpl.specter.macros :refer [transform]])
             [om.next.impl.parser :as om-parser]))
 
 ;;;; Transformations
