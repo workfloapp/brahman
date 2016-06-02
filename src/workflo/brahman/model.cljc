@@ -1,5 +1,6 @@
 (ns workflo.brahman.model
-  (:require [com.rpl.specter :as s]
+  (:require #?(:cljs [com.rpl.specter.macros :refer-macros [transform]]
+               :clj  [com.rpl.specter.macros :refer [transform]])
             [om.next.impl.parser :as om-parser]))
 
 ;;;; Transformations
@@ -7,7 +8,7 @@
 (defn transform-specter [tspec raw-data]
   (let [seq-data (if (coll? raw-data) raw-data [raw-data])
         tform    (into [] (conj tspec seq-data))
-        res      (apply s/transform tform)]
+        res      (apply #(transform %1 %2 %3) tform)]
     (cond-> res
       (not (coll? raw-data)) first)))
 
