@@ -4,22 +4,22 @@
  :source-paths #{"test"}
  :resource-paths #{"resources" "src"}
  :dependencies '[;; Boot
-                 [adzerk/boot-test "1.0.6" :scope "test"]
-                 [adzerk/bootlaces "0.1.13" :scope "test"]
+                 [adzerk/boot-test "1.1.1"]
+                 [adzerk/bootlaces "0.1.13"]
 
                  ;; Language libraries
-                 [org.clojure/clojure "1.8.0"]
+                 [org.clojure/clojure "1.9.0-alpha4"]
                  [org.clojure/core.async "0.2.374"]
 
                  ;; Datomic
                  [datascript "0.15.0"]
-                 [com.datomic/datomic-free "0.9.5344"]
+                 [com.datomic/datomic-free "0.9.5372"]
                  [datomic-schema "1.3.0"]
 
                  ;; Others
                  [bouncer "1.0.0"]
-                 [com.rpl/specter "0.9.1"]
-                 [org.omcljs/om "1.0.0-alpha32"]
+                 [com.rpl/specter "0.11.0"]
+                 [org.omcljs/om "1.0.0-alpha36"]
 
                  ;; Tests
                  [org.clojure/test.check "0.9.0"]])
