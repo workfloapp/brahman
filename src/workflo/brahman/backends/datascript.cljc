@@ -141,22 +141,29 @@
                  (namespace attr-name))))
           (bm/attrs model false))))
 
+(defn- param-clause
+  [[attr value]]
+  (if (= :db/id attr)
+    `[(~'= ~'?e ~value)]
+    ['?e attr value]))
+
 (defn datascript-query
   "Translate an Om Next query to a DataScript query based
    on the current DataScript schema."
   ([env query]
    (datascript-query env query []))
-  ([{:keys [model fetch-one?]} query clauses]
-   (let [model-attr (identifying-model-attr model)]
+  ([{:keys [model fetch-one?]} query params]
+   (let [model-attr    (identifying-model-attr model)
+         param-clauses (map param-clause params)]
      (if fetch-one?
        ;; Query a single entity
        `[:find (~'pull ~'?e ~query) .
          :where [~'?e ~model-attr]
-                ~@clauses]
+                ~@param-clauses]
        ;; Query a collection of entities
        `[:find [(~'pull ~'?e ~query) ~'...]
          :where [~'?e ~model-attr]
-                ~@clauses]))))
+                ~@param-clauses]))))
 
 (defn extract-links
   "Takes an Om Next query and extracts all links from it, returning
@@ -237,9 +244,9 @@
 
 (defn query-store
   "Executes an Om Next query against DataScript."
-  [conn env query clauses]
+  [conn env query params]
   (let [{:keys [query links]} (extract-links query)
-        ds-query              (datascript-query env query clauses)
+        ds-query              (datascript-query env query params)
         ds-result             (d/q ds-query @conn)
         link-results          (query-links conn env links)
         result                (merge-link-results ds-result
